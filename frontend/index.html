@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -12,7 +12,7 @@
       --bg4:    #0a0d16;
       --border: #2a3141;
       --text:   #e2e8f0;
-      --text2:  #b0bec5;   /* was --muted #64748b — now bright enough */
+      --text2:  #b0bec5;
       --text3:  #8b9dbe;
       --accent: #6366f1;
       --acc2:   #818cf8;
@@ -197,6 +197,8 @@
       --border:#c8d3e6;--text:#1a2133;--text2:#3a4a62;--text3:#7a8da8;
       --accent:#5b5df0;--acc2:#4f46e5;--danger:#dc2626;--warn:#b45309;--ok:#15803d;--info:#0369a1;
     }
+    :root.light .brand{color:var(--text)}
+    :root.light .brand span{color:var(--accent)}
     :root.light code{background:#eef2ff;color:#4338ca}
     :root.light .tbl td{border-bottom-color:#dde4ef}
     :root.light .tbl tbody tr:hover{background:#eef2fa}
@@ -212,7 +214,7 @@
     :root.light .b-proto{background:#f1f5f9;color:#475569}
     :root.light .b-svc{color:#0369a1}
     :root.light .sort-th:after{color:#94a3b8}
-    :root.light .ntab.active{background:#eef2ff;border-color:var(--accent)}
+    :root.light .ntab.active{background:#eef2ff;border-color:var(--accent);color:var(--accent)}
     :root.light .interval-pill{background:#eef2ff;color:#4338ca}
     :root.light .ports-tbl th{border-bottom-color:#dde4ef}
     :root.light .ports-tbl td{border-bottom-color:#e8edf5}
@@ -230,13 +232,14 @@
 <body>
 
 <div class="topbar">
-  <button class="brand" onclick="showView('settings')" style="background:none;border:none;cursor:pointer;padding:0"><span>⬡</span> Port Monitor</button>
+  <button class="brand" data-view="settings" onclick="showView('settings')" style="background:none;border:none;cursor:pointer;padding:0"><span>⬡</span> Port Monitor</button>
   <nav class="nav-tabs">
-    <button class="ntab" onclick="showView('dashboard')">Dashboard</button>
-    <button class="ntab" onclick="showView('targets')">Цели</button>
-    <button class="ntab" onclick="showView('scans')">Сканирования</button>
-    <button class="ntab" onclick="showView('schedules')">Расписание</button>
-    <button class="ntab" onclick="showView('settings')" style="margin-left:.5rem">⚙ Настройки</button>
+    <button class="ntab" data-view="dashboard"       onclick="showView('dashboard')">Dashboard</button>
+    <button class="ntab" data-view="targets"          onclick="showView('targets')">Targets</button>
+    <button class="ntab" data-view="scans"            onclick="showView('scans')">Scans</button>
+    <button class="ntab" data-view="vulnerabilities"  onclick="showView('vulnerabilities')">Vulnerabilities</button>
+    <button class="ntab" data-view="schedules"        onclick="showView('schedules')">Schedules</button>
+    <button class="ntab" data-view="settings"         onclick="showView('settings')" style="margin-left:.5rem">⚙ Settings</button>
   </nav>
 </div>
 
@@ -245,29 +248,29 @@
 <!-- ═══════════════════════════ DASHBOARD ════════════════════════════════════ -->
 <div id="view-dashboard">
   <div class="stats-grid">
-    <div class="card scard"><div class="snum" style="color:var(--acc2)" id="s-targets">—</div><div class="slbl">Целей</div></div>
-    <div class="card scard"><div class="snum" style="color:#fca5a5"      id="s-vulns">—</div><div class="slbl">Уязвимостей</div></div>
-    <div class="card scard"><div class="snum" style="color:var(--warn)"  id="s-ports">—</div><div class="slbl">Открытых портов</div></div>
-    <div class="card scard"><div class="snum" style="color:var(--info)"  id="s-scans">—</div><div class="slbl">Сканирований</div></div>
-    <div class="card scard"><div class="snum" style="color:var(--ok)"    id="s-running">—</div><div class="slbl">Активных сканов</div></div>
+    <div class="card scard"><div class="snum" style="color:var(--acc2)" id="s-targets">—</div><div class="slbl">Targets</div></div>
+    <div class="card scard"><div class="snum" style="color:#fca5a5"      id="s-vulns">—</div><div class="slbl">Vulnerabilities</div></div>
+    <div class="card scard"><div class="snum" style="color:var(--warn)"  id="s-ports">—</div><div class="slbl">Open ports</div></div>
+    <div class="card scard"><div class="snum" style="color:var(--info)"  id="s-scans">—</div><div class="slbl">Scans</div></div>
+    <div class="card scard"><div class="snum" style="color:var(--ok)"    id="s-running">—</div><div class="slbl">Active scans</div></div>
   </div>
 
   <div class="card">
-    <div class="card-hd">Цели — последний скан
+    <div class="card-hd">Targets — last scan
       <div class="tools">
-        <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻ Обновить</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻ Refresh</button>
       </div>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr>
           <th style="width:2rem"></th>
-          <th class="sort-th" onclick="sortDash('name')">Имя</th>
-          <th class="sort-th" onclick="sortDash('host')">Хост</th>
-          <th>Теги</th>
-          <th class="sort-th" onclick="sortDash('open_ports_count')">Портов</th>
-          <th class="sort-th" onclick="sortDash('last_scan_at')">Последний скан</th>
-          <th>Статус</th>
+          <th class="sort-th" onclick="sortDash('name')">Name</th>
+          <th class="sort-th" onclick="sortDash('host')">Host</th>
+          <th>Tags</th>
+          <th class="sort-th" onclick="sortDash('open_ports_count')">Ports</th>
+          <th class="sort-th" onclick="sortDash('last_scan_at')">Last scan</th>
+          <th>Status</th>
           <th></th>
         </tr></thead>
         <tbody id="dash-tbody"></tbody>
@@ -275,32 +278,26 @@
     </div>
   </div>
 
-  <!-- Vulnerabilities -->
+  <!-- Vulnerabilities compact -->
   <div class="card">
-    <div class="card-hd">Уязвимости
+    <div class="card-hd">Recent vulnerabilities
       <div class="tools">
-        <select class="inp inp-sm" id="vf-host" style="width:auto;min-width:130px" onchange="loadVulns()">
-          <option value="">Все хосты</option>
-        </select>
-        <select class="inp inp-sm" id="vf-tag" style="width:auto;min-width:100px" onchange="loadVulns()">
-          <option value="">Все теги</option>
-        </select>
-        <select class="inp inp-sm" id="vf-time" style="width:auto" onchange="loadVulns()">
-          <option value="">Всё время</option>
-          <option value="24">24 ч</option>
-          <option value="168">7 дней</option>
-          <option value="720">30 дней</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="loadVulns()">↻</button>
+        <span id="dash-vuln-count" style="color:var(--text3);font-size:.78rem"></span>
+        <button class="btn btn-ghost btn-sm" onclick="showView('vulnerabilities')">View all →</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻</button>
       </div>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr>
-          <th>Хост</th><th>IP</th><th>Теги</th><th>Порт</th><th>Протокол</th>
-          <th>Сервис</th><th>Версия</th><th>Впервые</th><th>Последний раз</th>
+          <th>Target</th>
+          <th>Port</th>
+          <th>Service</th>
+          <th>Version</th>
+          <th>First seen</th>
+          <th>Last seen</th>
         </tr></thead>
-        <tbody id="vuln-tbody"></tbody>
+        <tbody id="vuln-dash-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -309,18 +306,18 @@
 <!-- ═══════════════════════════ TARGETS ══════════════════════════════════════ -->
 <div id="view-targets" style="display:none">
   <div class="card">
-    <div class="card-hd">Добавить цель</div>
+    <div class="card-hd">Add target</div>
     <div class="card-bd">
       <form onsubmit="addTarget(event)" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:.6rem;align-items:end">
-        <div><label class="form-lbl">Название <span class="req">*</span></label>
+        <div><label class="form-lbl">Name <span class="req">*</span></label>
           <input class="inp" id="t-name" placeholder="prod-web" required></div>
         <div><label class="form-lbl">IP / hostname <span class="req">*</span></label>
           <input class="inp" id="t-host" placeholder="192.168.1.1" required></div>
-        <div><label class="form-lbl">Теги <span style="color:var(--text3)">(через запятую)</span></label>
+        <div><label class="form-lbl">Tags <span style="color:var(--text3)">(comma-separated)</span></label>
           <input class="inp" id="t-tags" placeholder="production, web, nginx"></div>
-        <div><label class="form-lbl">Описание</label>
-          <input class="inp" id="t-desc" placeholder="боевой сервер, DMZ"></div>
-        <button type="submit" class="btn btn-pr" style="white-space:nowrap">+ Добавить</button>
+        <div><label class="form-lbl">Description</label>
+          <input class="inp" id="t-desc" placeholder="prod server, DMZ"></div>
+        <button type="submit" class="btn btn-pr" style="white-space:nowrap">+ Add</button>
       </form>
       <div id="t-tags-preview" style="margin-top:.4rem;min-height:1.2rem"></div>
     </div>
@@ -329,23 +326,23 @@
   <!-- Tag filter bar -->
   <div class="card" style="margin-bottom:.6rem">
     <div class="tag-filter-bar">
-      <span>Фильтр по тегу:</span>
+      <span>Filter by tag:</span>
       <button class="tag-pill" id="tag-all" style="background:#1e2040;color:var(--acc2);border:1px solid var(--accent)"
-        onclick="filterByTag('')">Все</button>
+        onclick="filterByTag('')">All</button>
       <span id="tag-filter-pills"></span>
     </div>
   </div>
 
   <!-- Bulk toolbar -->
   <div id="bulk-bar">
-    <span style="color:var(--info);font-weight:600;font-size:.8rem" id="bulk-lbl">0 выбрано</span>
+    <span style="color:var(--info);font-weight:600;font-size:.8rem" id="bulk-lbl">0 selected</span>
     <select class="inp" id="bulk-type" style="width:auto">
       <option value="tcp">TCP</option>
       <option value="udp">UDP</option>
       <option value="both">TCP + UDP</option>
     </select>
-    <button class="btn btn-sky btn-sm" onclick="runBulk()">▶ Сканировать</button>
-    <button class="btn btn-ghost btn-sm" onclick="clearSel()">Снять выбор</button>
+    <button class="btn btn-sky btn-sm" onclick="runBulk()">▶ Scan</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearSel()">Clear selection</button>
   </div>
 
   <div class="card">
@@ -354,8 +351,8 @@
         <thead><tr>
           <th style="width:2rem"><input class="chk" type="checkbox" id="chk-all" onchange="selAll(this.checked)"></th>
           <th style="width:2rem"></th>
-          <th>Имя</th><th>Хост</th><th>Теги</th><th>Описание</th>
-          <th>Портов</th><th>Последний скан</th><th>Статус</th><th>Действия</th>
+          <th>Name</th><th>Host</th><th>Tags</th><th>Description</th>
+          <th>Ports</th><th>Last scan</th><th>Status</th><th>Actions</th>
         </tr></thead>
         <tbody id="targets-tbody"></tbody>
       </table>
@@ -366,23 +363,55 @@
 <!-- ═══════════════════════════ SCANS ════════════════════════════════════════ -->
 <div id="view-scans" style="display:none">
   <div class="card">
-    <div class="card-hd">История сканирований
-      <button class="btn btn-ghost btn-sm" onclick="loadScans()">↻ Обновить</button>
+    <div class="card-hd">Scan history
+      <button class="btn btn-ghost btn-sm" onclick="loadScans()">↻ Refresh</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr>
           <th style="width:2rem"></th>
           <th class="sort-th" onclick="sortScans('id')">ID</th>
-          <th class="sort-th" onclick="sortScans('target_name')">Цель</th>
-          <th class="sort-th" onclick="sortScans('target_host')">Хост</th>
-          <th>Тип</th>
-          <th class="sort-th" onclick="sortScans('started_at')">Начало</th>
-          <th class="sort-th" onclick="sortScans('finished_at')">Конец</th>
-          <th>Статус</th>
-          <th class="sort-th" onclick="sortScans('open_ports_count')">Портов</th>
+          <th class="sort-th" onclick="sortScans('target_name')">Target</th>
+          <th class="sort-th" onclick="sortScans('target_host')">Host</th>
+          <th>Type</th>
+          <th class="sort-th" onclick="sortScans('started_at')">Started</th>
+          <th class="sort-th" onclick="sortScans('finished_at')">Finished</th>
+          <th>Status</th>
+          <th class="sort-th" onclick="sortScans('open_ports_count')">Ports</th>
         </tr></thead>
         <tbody id="scans-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ VULNERABILITIES ═══════════════════════════════ -->
+<div id="view-vulnerabilities" style="display:none">
+  <div class="card">
+    <div class="card-hd">Vulnerabilities
+      <div class="tools">
+        <select class="inp inp-sm" id="vf-host" style="width:auto;min-width:130px" onchange="loadVulnsFull()">
+          <option value="">All hosts</option>
+        </select>
+        <select class="inp inp-sm" id="vf-tag" style="width:auto;min-width:100px" onchange="loadVulnsFull()">
+          <option value="">All tags</option>
+        </select>
+        <select class="inp inp-sm" id="vf-time" style="width:auto" onchange="loadVulnsFull()">
+          <option value="">All time</option>
+          <option value="24">24h</option>
+          <option value="168">7d</option>
+          <option value="720">30d</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadVulnsFull()">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>Target</th><th>Host</th><th>Tags</th><th>Port</th><th>Proto</th>
+          <th>Service</th><th>Version</th><th>First seen</th><th>Last seen</th>
+        </tr></thead>
+        <tbody id="vuln-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -391,11 +420,11 @@
 <!-- ═══════════════════════════ SCHEDULES ════════════════════════════════════ -->
 <div id="view-schedules" style="display:none">
   <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
-    <button class="btn btn-pr" onclick="openSchedModal()">+ Новое расписание</button>
+    <button class="btn btn-pr" onclick="openSchedModal()">+ New schedule</button>
   </div>
   <div class="sched-grid" id="sched-grid"></div>
   <div id="sched-empty" style="display:none;color:var(--text3);text-align:center;padding:2rem">
-    Расписаний нет. Создайте первое.
+    No schedules. Create your first one.
   </div>
 </div>
 
@@ -410,21 +439,21 @@
     </div>
     <div class="card snav-card" onclick="showView('targets')">
       <div class="snav-icon">🎯</div>
-      <div class="snav-lbl">Цели</div>
+      <div class="snav-lbl">Targets</div>
     </div>
     <div class="card snav-card" onclick="showView('scans')">
       <div class="snav-icon">🔍</div>
-      <div class="snav-lbl">Сканирования</div>
+      <div class="snav-lbl">Scans</div>
     </div>
     <div class="card snav-card" onclick="showView('schedules')">
       <div class="snav-icon">🗓</div>
-      <div class="snav-lbl">Расписание</div>
+      <div class="snav-lbl">Schedules</div>
     </div>
   </div>
 
   <!-- Appearance -->
   <div class="card" style="margin-bottom:.9rem">
-    <div class="card-hd">Внешний вид</div>
+    <div class="card-hd">Appearance</div>
     <div class="card-bd">
       <div class="theme-toggle">
         <label class="tgl-wrap">
@@ -432,8 +461,8 @@
           <div class="tgl-track"><div class="tgl-knob"></div></div>
         </label>
         <div>
-          <div style="font-weight:500" id="theme-label">Тёмная тема</div>
-          <div style="color:var(--text3);font-size:.78rem">Выберите светлую или тёмную цветовую схему</div>
+          <div style="font-weight:500" id="theme-label">Dark theme</div>
+          <div style="color:var(--text3);font-size:.78rem">Switch between light and dark color scheme</div>
         </div>
       </div>
     </div>
@@ -441,7 +470,7 @@
 
   <!-- Integrations -->
   <div class="card">
-    <div class="card-hd">Интеграции</div>
+    <div class="card-hd">Integrations</div>
     <div class="card-bd" style="display:flex;flex-direction:column;gap:.75rem">
 
       <!-- Slack -->
@@ -449,16 +478,16 @@
         <div class="integ-icon">💬</div>
         <div class="integ-body">
           <div class="integ-title">Slack</div>
-          <div class="integ-desc">Уведомления при обнаружении новых открытых портов. Вставьте Incoming Webhook URL из настроек вашего Slack-приложения.</div>
+          <div class="integ-desc">Get notified when new open ports are detected. Paste an Incoming Webhook URL from your Slack app settings.</div>
           <div class="integ-row">
             <input class="inp" id="slack-url" placeholder="https://hooks.slack.com/services/T.../B.../..." style="flex:1;min-width:0">
-            <button class="btn btn-ghost btn-sm" onclick="testSlack()" style="white-space:nowrap">Тест</button>
-            <button class="btn btn-pr btn-sm" onclick="saveSlack()" style="white-space:nowrap">Сохранить</button>
+            <button class="btn btn-ghost btn-sm" onclick="testSlack()" style="white-space:nowrap">Test</button>
+            <button class="btn btn-pr btn-sm" onclick="saveSlack()" style="white-space:nowrap">Save</button>
           </div>
           <div>
             <label style="display:flex;align-items:center;gap:.4rem;margin-top:.5rem;cursor:pointer;font-size:.8rem;color:var(--text2)">
               <input class="chk" type="checkbox" id="slack-notify-chk" onchange="saveSlackNotify()">
-              Уведомлять о новых открытых портах
+              Notify on new open ports
             </label>
           </div>
           <div class="slack-status" id="slack-status"></div>
@@ -477,19 +506,19 @@
 <!-- Scan trigger modal -->
 <div class="modal-wrap" id="modal-trig">
   <div class="modal-box">
-    <div class="modal-hd">Запустить скан<button class="close-x" onclick="hideModal('modal-trig')">✕</button></div>
+    <div class="modal-hd">Run scan<button class="close-x" onclick="hideModal('modal-trig')">✕</button></div>
     <div class="modal-bd-inner">
-      <div style="margin-bottom:.75rem">Цель: <code id="trig-host"></code></div>
-      <label class="form-lbl">Тип скана</label>
+      <div style="margin-bottom:.75rem">Target: <code id="trig-host"></code></div>
+      <label class="form-lbl">Scan type</label>
       <select class="inp" id="trig-type">
-        <option value="tcp">TCP — top 1000 (без root)</option>
-        <option value="udp">UDP — top 100 (нужен root)</option>
+        <option value="tcp">TCP — top 1000 (no root)</option>
+        <option value="udp">UDP — top 100 (root req.)</option>
         <option value="both">TCP + UDP</option>
       </select>
     </div>
     <div class="modal-ft">
-      <button class="btn btn-ghost" onclick="hideModal('modal-trig')">Отмена</button>
-      <button class="btn btn-pr" onclick="confirmScan()">▶ Запустить</button>
+      <button class="btn btn-ghost" onclick="hideModal('modal-trig')">Cancel</button>
+      <button class="btn btn-pr" onclick="confirmScan()">▶ Run</button>
     </div>
   </div>
 </div>
@@ -497,15 +526,15 @@
 <!-- Schedule create modal -->
 <div class="modal-wrap" id="modal-sched">
   <div class="modal-box" style="max-width:560px">
-    <div class="modal-hd">Новое расписание<button class="close-x" onclick="hideModal('modal-sched')">✕</button></div>
+    <div class="modal-hd">New schedule<button class="close-x" onclick="hideModal('modal-sched')">✕</button></div>
     <div class="modal-bd-inner">
       <div class="form-row">
-        <label class="form-lbl">Название <span class="req">*</span></label>
+        <label class="form-lbl">Name <span class="req">*</span></label>
         <input class="inp" id="sc-name" placeholder="Daily production scan">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem" class="form-row">
         <div>
-          <label class="form-lbl">Тип скана</label>
+          <label class="form-lbl">Scan type</label>
           <select class="inp" id="sc-type">
             <option value="tcp">TCP</option>
             <option value="udp">UDP (root)</option>
@@ -513,31 +542,31 @@
           </select>
         </div>
         <div>
-          <label class="form-lbl">Расписание</label>
+          <label class="form-lbl">Interval</label>
           <select class="inp" id="sc-interval">
-            <option value="hourly">Каждый час</option>
-            <option value="daily" selected>Каждый день</option>
-            <option value="weekly">Каждую неделю</option>
-            <option value="monthly">Каждый месяц</option>
+            <option value="hourly">Every hour</option>
+            <option value="daily" selected>Every day</option>
+            <option value="weekly">Every week</option>
+            <option value="monthly">Every month</option>
           </select>
         </div>
       </div>
 
       <div class="form-row">
-        <label class="form-lbl">Фильтр по тегу <span style="color:var(--text3)">(все хосты с тегом)</span></label>
+        <label class="form-lbl">Filter by tag <span style="color:var(--text3)">(all hosts with this tag)</span></label>
         <input class="inp" id="sc-tags" placeholder="production, web" oninput="updateSchedPreview()">
       </div>
 
       <div class="form-row">
-        <label class="form-lbl">Или выбрать конкретные хосты</label>
+        <label class="form-lbl">Or select specific hosts</label>
         <div class="tsel-list" id="sc-targets-list"></div>
       </div>
 
       <div id="sc-preview" style="color:var(--text3);font-size:.78rem;margin-top:.3rem"></div>
     </div>
     <div class="modal-ft">
-      <button class="btn btn-ghost" onclick="hideModal('modal-sched')">Отмена</button>
-      <button class="btn btn-pr" onclick="createSchedule()">Создать</button>
+      <button class="btn btn-ghost" onclick="hideModal('modal-sched')">Cancel</button>
+      <button class="btn btn-pr" onclick="createSchedule()">Create</button>
     </div>
   </div>
 </div>
@@ -545,16 +574,16 @@
 <!-- Edit tags modal -->
 <div class="modal-wrap" id="modal-tags">
   <div class="modal-box">
-    <div class="modal-hd">Редактировать теги<button class="close-x" onclick="hideModal('modal-tags')">✕</button></div>
+    <div class="modal-hd">Edit tags<button class="close-x" onclick="hideModal('modal-tags')">✕</button></div>
     <div class="modal-bd-inner">
-      <div style="margin-bottom:.6rem">Хост: <code id="etag-host"></code></div>
-      <label class="form-lbl">Теги (через запятую)</label>
+      <div style="margin-bottom:.6rem">Host: <code id="etag-host"></code></div>
+      <label class="form-lbl">Tags (comma-separated)</label>
       <input class="inp" id="etag-val" placeholder="production, web, nginx">
       <div id="etag-preview" style="margin-top:.4rem;min-height:1.2rem"></div>
     </div>
     <div class="modal-ft">
-      <button class="btn btn-ghost" onclick="hideModal('modal-tags')">Отмена</button>
-      <button class="btn btn-pr" onclick="saveTagsEdit()">Сохранить</button>
+      <button class="btn btn-ghost" onclick="hideModal('modal-tags')">Cancel</button>
+      <button class="btn btn-pr" onclick="saveTagsEdit()">Save</button>
     </div>
   </div>
 </div>
@@ -563,7 +592,7 @@
 
 <script>
 const API='/api';
-let dashData=[], scansData=[], targetsData=[], vulnData=[], schedData=[], allTags=[];
+let dashData=[], scansData=[], targetsData=[], vulnData=[], vulnFullData=[], schedData=[], allTags=[];
 let dashSort={k:'open_ports_count',d:'desc'}, scansSort={k:'started_at',d:'desc'};
 let trigId=null, etagId=null;
 let sel=new Set(), tagFilter='';
@@ -589,18 +618,18 @@ function hideAllModals(){
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 function showView(v){
-  ['dashboard','targets','scans','schedules','settings'].forEach(id=>
+  ['dashboard','targets','scans','vulnerabilities','schedules','settings'].forEach(id=>
     document.getElementById('view-'+id).style.display=id===v?'':'none'
   );
-  document.querySelectorAll('.ntab').forEach(b=>{
-    const map={dashboard:'dashboard',targets:'цел',scans:'скан',schedules:'расп',settings:'настр'};
-    b.classList.toggle('active',b.textContent.toLowerCase().includes(map[v]||''));
+  document.querySelectorAll('.ntab[data-view]').forEach(b=>{
+    b.classList.toggle('active', b.dataset.view===v);
   });
-  if(v==='dashboard') loadDashboard();
-  if(v==='targets')   loadTargets();
-  if(v==='scans')     loadScans();
-  if(v==='schedules') loadSchedules();
-  if(v==='settings')  loadSettings();
+  if(v==='dashboard')       loadDashboard();
+  if(v==='targets')         loadTargets();
+  if(v==='scans')           loadScans();
+  if(v==='vulnerabilities') loadVulnsFull();
+  if(v==='schedules')       loadSchedules();
+  if(v==='settings')        loadSettings();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -623,14 +652,30 @@ function toast(msg,ok=true){
   setTimeout(()=>d.remove(),4000);
 }
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function fdt(iso){return iso?new Date(iso+'Z').toLocaleString('ru'):'—';}
+function fdt(iso){return iso?new Date(iso+'Z').toLocaleString('en-GB'):'—';}
+
+function timeAgo(iso){
+  if(!iso) return '—';
+  const d=new Date(iso+'Z');
+  const diff=Math.floor((Date.now()-d.getTime())/1000);
+  const full=d.toLocaleString('en-GB');
+  let rel;
+  if(diff<60)         rel='just now';
+  else if(diff<3600)  rel=Math.floor(diff/60)+'m ago';
+  else if(diff<86400) rel=Math.floor(diff/3600)+'h ago';
+  else if(diff<172800)rel='yesterday';
+  else if(diff<604800)rel=Math.floor(diff/86400)+'d ago';
+  else if(diff<2592000)rel=Math.floor(diff/604800)+'w ago';
+  else                rel=Math.floor(diff/2592000)+'mo ago';
+  return `<span title="${full}" style="cursor:default;color:var(--text2)">${rel}</span>`;
+}
 
 function statusBadge(s){
   const m={completed:'b-ok',failed:'b-fail',running:'b-run',pending:'b-pend'};
   return `<span class="bdg ${m[s]||'b-fail'}">${s}</span>`;
 }
 function scanBadge(st){
-  return `<span class="badge-scan"><span class="dot"></span>${st==='pending'?'ожидание':'сканирование'}</span>`;
+  return `<span class="badge-scan"><span class="dot"></span>${st==='pending'?'pending':'scanning'}</span>`;
 }
 
 // ── Tag utils ─────────────────────────────────────────────────────────────────
@@ -664,14 +709,14 @@ async function toggleExpand(ns,rowId,scanId,cols){
   const mainTr=document.getElementById(`tr-${ns}-${rowId}`);
   if(!mainTr)return;
   const pTr=document.createElement('tr');pTr.id=ptrId;pTr.className='ports-row';
-  pTr.innerHTML=`<td colspan="${cols}" style="color:var(--text3);font-size:.8rem">Загрузка…</td>`;
+  pTr.innerHTML=`<td colspan="${cols}" style="color:var(--text3);font-size:.8rem">Loading…</td>`;
   mainTr.after(pTr);
   try{const p=await fetchPorts(scanId);pTr.innerHTML=`<td colspan="${cols}">${renderPortsTable(p)}</td>`;}
   catch(e){pTr.innerHTML=`<td colspan="${cols}" style="color:#fca5a5;font-size:.8rem">${esc(e.message)}</td>`;}
 }
 async function fetchPorts(id){if(!id)return[];if(PC[id])return PC[id];const s=await api('/scans/'+id);PC[id]=s.ports||[];return PC[id];}
 function renderPortsTable(ports){
-  if(!ports||!ports.length)return `<div class="no-ports">Открытых портов не найдено</div>`;
+  if(!ports||!ports.length)return `<div class="no-ports">No open ports found</div>`;
   const rows=ports.slice().sort((a,b)=>a.port-b.port).map(p=>{
     const ver=[p.product,p.version].filter(Boolean).join(' ');
     return `<tr><td><span class="b-port">${p.port}</span></td><td><span class="b-proto">${p.protocol}</span></td>
@@ -680,23 +725,27 @@ function renderPortsTable(ports){
       <td style="color:var(--text3)">${esc(ver||'—')}</td></tr>`;
   }).join('');
   return `<div class="ports-wrap"><table class="ports-tbl">
-    <thead><tr><th>Порт</th><th>Протокол</th><th>Состояние</th><th>Сервис</th><th>Версия</th></tr></thead>
+    <thead><tr><th>Port</th><th>Protocol</th><th>State</th><th>Service</th><th>Version</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 async function loadDashboard(){
   try{
-    const[stats,targets,tags]=await Promise.all([api('/stats'),api('/targets'),api('/tags')]);
+    const[stats,targets,tags,vulns]=await Promise.all([
+      api('/stats'),api('/targets'),api('/tags'),
+      api('/vulnerabilities?active_only=true'),
+    ]);
     document.getElementById('s-targets').textContent=stats.total_targets;
     document.getElementById('s-vulns').textContent=stats.active_vulns;
     document.getElementById('s-ports').textContent=stats.total_open_ports;
     document.getElementById('s-scans').textContent=stats.total_scans;
     document.getElementById('s-running').textContent=stats.running_scans;
-    dashData=targets; allTags=tags;
+    dashData=targets; allTags=tags; vulnData=vulns;
     renderDash();
+    renderVulnsCompact();
+    // keep vuln filters in sync for the full tab
     populateVulnFilters(targets,tags);
-    loadVulns();
   }catch(e){toast(e.message,false);}
 }
 function renderDash(){
@@ -710,27 +759,59 @@ function renderDash(){
       <td><code>${esc(t.host)}</code></td>
       <td>${renderTags(t.tags)}</td>
       <td>${t.open_ports_count>0?`<span class="bdg b-open">${t.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
-      <td style="color:var(--text2)">${fdt(t.last_scan_at)}</td>
+      <td>${timeAgo(t.last_scan_at)}</td>
       <td>${act?scanBadge(t.active_scan_status):has?`<span class="bdg b-ok">ok</span>`:'<span style="color:var(--text3)">—</span>'}</td>
-      <td><button class="btn btn-pr btn-sm${act?' disabled':''}" onclick="${act?'':'openTrig('+t.id+',\''+esc(t.host)+'\')'}">${act?'…':'Скан'}</button></td>
+      <td><button class="btn btn-pr btn-sm${act?' disabled':''}" onclick="${act?'':'openTrig('+t.id+',\''+esc(t.host)+'\')'}">${act?'…':'Scan'}</button></td>
     </tr>`;
   }).join('');
   sorted.forEach(t=>{if(EXP.d.has(t.id)&&t.last_scan_id)toggleExpand('d',t.id,t.last_scan_id,COLS);});
 }
 function sortDash(k){dashSort={k,d:dashSort.k===k&&dashSort.d==='desc'?'asc':'desc'};renderDash();}
 
-// ── Vulns ─────────────────────────────────────────────────────────────────────
+// ── Vulns (compact dashboard) ─────────────────────────────────────────────────
+function renderVulnsCompact(){
+  const total=vulnData.length;
+  const shown=vulnData.slice(0,20);
+  const cntEl=document.getElementById('dash-vuln-count');
+  if(cntEl) cntEl.textContent=total>20?`Showing 20 of ${total}`:(total?`${total} active`:'');
+  if(!total){
+    document.getElementById('vuln-dash-tbody').innerHTML=
+      '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:1.2rem">No active vulnerabilities</td></tr>';
+    return;
+  }
+  document.getElementById('vuln-dash-tbody').innerHTML=shown.map(v=>{
+    const ver=[v.product,v.version].filter(Boolean).join(' ');
+    return `<tr>
+      <td><span style="font-weight:500">${esc(v.target_name||'?')}</span><br><code style="font-size:.75rem">${esc(v.target_host||'')}</code></td>
+      <td><span class="b-port">${v.port}</span><span class="b-proto" style="margin-left:.3rem">${v.protocol}</span></td>
+      <td><span class="b-svc">${esc(v.service||'—')}</span></td>
+      <td style="color:var(--text3);font-size:.8rem">${esc(ver||'—')}</td>
+      <td>${timeAgo(v.first_seen_at)}</td>
+      <td>${timeAgo(v.last_seen_at)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Vulns (full tab) ──────────────────────────────────────────────────────────
 function populateVulnFilters(targets,tags){
   const hSel=document.getElementById('vf-host');
   const cur=hSel.value;
-  hSel.innerHTML='<option value="">Все хосты</option>'+
+  hSel.innerHTML='<option value="">All hosts</option>'+
     targets.map(t=>`<option value="${t.id}" ${cur==t.id?'selected':''}>${esc(t.name)} (${esc(t.host)})</option>`).join('');
   const tSel=document.getElementById('vf-tag');
   const curT=tSel.value;
-  tSel.innerHTML='<option value="">Все теги</option>'+
+  tSel.innerHTML='<option value="">All tags</option>'+
     tags.map(t=>`<option value="${esc(t)}" ${curT===t?'selected':''}>${esc(t)}</option>`).join('');
 }
-async function loadVulns(){
+async function loadVulnsFull(){
+  // Ensure filters are populated
+  if(!allTags.length){
+    try{
+      const[targets,tags]=await Promise.all([api('/targets'),api('/tags')]);
+      allTags=tags; targetsData=targets;
+      populateVulnFilters(targets,tags);
+    }catch(e){}
+  }
   const tid=document.getElementById('vf-host').value;
   const tag=document.getElementById('vf-tag').value;
   const h=document.getElementById('vf-time').value;
@@ -738,14 +819,15 @@ async function loadVulns(){
   if(tid) q+=`&target_id=${tid}`;
   if(tag) q+=`&tag=${encodeURIComponent(tag)}`;
   if(h)   q+=`&since_hours=${h}`;
-  try{vulnData=await api(q);renderVulns();}catch(e){toast(e.message,false);}
+  try{vulnFullData=await api(q);renderVulnsFull();}catch(e){toast(e.message,false);}
 }
-function renderVulns(){
-  if(!vulnData.length){
-    document.getElementById('vuln-tbody').innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center;padding:1.2rem">Активных уязвимостей нет</td></tr>';
+function renderVulnsFull(){
+  if(!vulnFullData.length){
+    document.getElementById('vuln-tbody').innerHTML=
+      '<tr><td colspan="9" style="color:var(--text3);text-align:center;padding:1.2rem">No active vulnerabilities</td></tr>';
     return;
   }
-  document.getElementById('vuln-tbody').innerHTML=vulnData.map(v=>{
+  document.getElementById('vuln-tbody').innerHTML=vulnFullData.map(v=>{
     const ver=[v.product,v.version].filter(Boolean).join(' ');
     return `<tr>
       <td>${esc(v.target_name||'?')}</td>
@@ -755,8 +837,8 @@ function renderVulns(){
       <td><span class="b-proto">${v.protocol}</span></td>
       <td><span class="b-svc">${esc(v.service||'—')}</span></td>
       <td style="color:var(--text3)">${esc(ver||'—')}</td>
-      <td style="color:var(--text2)">${fdt(v.first_seen_at)}</td>
-      <td style="color:var(--text3)">${fdt(v.last_seen_at)}</td>
+      <td>${timeAgo(v.first_seen_at)}</td>
+      <td>${timeAgo(v.last_seen_at)}</td>
     </tr>`;
   }).join('');
 }
@@ -802,10 +884,10 @@ function renderTargetsData(list){
       </td>
       <td style="color:var(--text3)">${esc(t.description||'')}</td>
       <td>${t.open_ports_count>0?`<span class="bdg b-open">${t.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
-      <td style="color:var(--text2)">${fdt(t.last_scan_at)}</td>
+      <td>${timeAgo(t.last_scan_at)}</td>
       <td>${act?scanBadge(t.active_scan_status):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="display:flex;gap:.3rem">
-        <button class="btn btn-pr btn-sm${act?' disabled':''}" ${act?'':'onclick="openTrig('+t.id+',\''+esc(t.host)+'\')"'}>${act?'…':'Скан'}</button>
+        <button class="btn btn-pr btn-sm${act?' disabled':''}" ${act?'':'onclick="openTrig('+t.id+',\''+esc(t.host)+'\')"'}>${act?'…':'Scan'}</button>
         <button class="btn btn-danger btn-sm" onclick="delTarget(${t.id})">✕</button>
       </td>
     </tr>`;
@@ -816,12 +898,12 @@ function selToggle(id,on){on?sel.add(id):sel.delete(id);updateBulk();
   document.getElementById('chk-all').checked=targetsData.length>0&&targetsData.every(t=>sel.has(t.id));}
 function selAll(on){targetsData.forEach(t=>on?sel.add(t.id):sel.delete(t.id));renderTargets();}
 function clearSel(){sel.clear();renderTargets();}
-function updateBulk(){const n=sel.size;document.getElementById('bulk-bar').classList.toggle('on',n>0);document.getElementById('bulk-lbl').textContent=`${n} выбрано`;}
+function updateBulk(){const n=sel.size;document.getElementById('bulk-bar').classList.toggle('on',n>0);document.getElementById('bulk-lbl').textContent=`${n} selected`;}
 async function runBulk(){
   const type=document.getElementById('bulk-type').value;
   let ok=0,fail=0;
   await Promise.all([...sel].map(async id=>{try{await api('/targets/'+id+'/scan',{method:'POST',body:JSON.stringify({scan_type:type})});ok++;}catch{fail++;}}));
-  toast(`Запущено: ${ok}${fail?' | Ошибок: '+fail:''}`,!fail);
+  toast(`Launched: ${ok}${fail?' | Errors: '+fail:''}`,!fail);
   clearSel();setTimeout(()=>{loadTargets();loadDashboard();},800);
 }
 async function addTarget(e){
@@ -835,12 +917,12 @@ async function addTarget(e){
     })});
     ['t-name','t-host','t-tags','t-desc'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('t-tags-preview').innerHTML='';
-    toast('Цель добавлена');loadTargets();
+    toast('Target added');loadTargets();
   }catch(e){toast(e.message,false);}
 }
 async function delTarget(id){
-  if(!confirm('Удалить цель?'))return;
-  try{await api('/targets/'+id,{method:'DELETE'});toast('Цель удалена');sel.delete(id);loadTargets();}
+  if(!confirm('Delete target?'))return;
+  try{await api('/targets/'+id,{method:'DELETE'});toast('Target deleted');sel.delete(id);loadTargets();}
   catch(e){toast(e.message,false);}
 }
 
@@ -855,7 +937,7 @@ function openTagsEdit(id,host,tags){
 async function saveTagsEdit(){
   const tags=document.getElementById('etag-val').value.trim();
   try{await api('/targets/'+etagId+'/tags',{method:'PATCH',body:JSON.stringify({tags})});
-    toast('Теги обновлены');hideModal('modal-tags');loadTargets();}
+    toast('Tags updated');hideModal('modal-tags');loadTargets();}
   catch(e){toast(e.message,false);}
 }
 
@@ -874,8 +956,8 @@ function renderScans(){
       <td>${esc(s.target_name||'?')}</td>
       <td><code>${esc(s.target_host||'?')}</code></td>
       <td><span class="b-proto">${s.scan_type}</span></td>
-      <td style="color:var(--text2)">${fdt(s.started_at)}</td>
-      <td style="color:var(--text2)">${fdt(s.finished_at)}</td>
+      <td>${timeAgo(s.started_at)}</td>
+      <td>${timeAgo(s.finished_at)}</td>
       <td>${['pending','running'].includes(s.status)?scanBadge(s.status):statusBadge(s.status)}</td>
       <td>${s.open_ports_count>0?`<span class="bdg b-open">${s.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
     </tr>`;
@@ -889,7 +971,7 @@ async function confirmScan(){
   const type=document.getElementById('trig-type').value;
   hideModal('modal-trig');
   try{await api('/targets/'+trigId+'/scan',{method:'POST',body:JSON.stringify({scan_type:type})});
-    toast('Скан запущен');setTimeout(()=>{loadTargets();loadDashboard();loadScans();},800);}
+    toast('Scan started');setTimeout(()=>{loadTargets();loadDashboard();loadScans();},800);}
   catch(e){toast(e.message,false);}
 }
 
@@ -897,7 +979,7 @@ async function confirmScan(){
 async function loadSchedules(){
   try{schedData=await api('/schedules');renderSchedules();}catch(e){toast(e.message,false);}
 }
-function intervalLabel(i){return{hourly:'Каждый час',daily:'Каждый день',weekly:'Каждую неделю',monthly:'Каждый месяц'}[i]||i;}
+function intervalLabel(i){return{hourly:'Every hour',daily:'Every day',weekly:'Every week',monthly:'Every month'}[i]||i;}
 function renderSchedules(){
   const g=document.getElementById('sched-grid');
   const emp=document.getElementById('sched-empty');
@@ -911,26 +993,25 @@ function renderSchedules(){
       <div class="sched-name">
         <span class="interval-pill">${intervalLabel(s.interval)}</span>
         ${esc(s.name)}
-        <span style="margin-left:auto"><span class="bdg ${s.is_active?'b-ok':'b-fail'}">${s.is_active?'активно':'пауза'}</span></span>
+        <span style="margin-left:auto"><span class="bdg ${s.is_active?'b-ok':'b-fail'}">${s.is_active?'active':'paused'}</span></span>
       </div>
       <div class="sched-meta">
-        <span><b>Тип:</b> ${s.scan_type}</span>
-        <span><b>Следующий запуск:</b> ${fdt(s.next_run_at)}</span>
-        <span><b>Последний:</b> ${fdt(s.last_run_at)}</span>
+        <span><b>Type:</b> ${s.scan_type}</span>
+        <span><b>Next run:</b> ${timeAgo(s.next_run_at)}</span>
+        <span><b>Last run:</b> ${timeAgo(s.last_run_at)}</span>
       </div>
       ${tagStr?`<div style="margin-bottom:.4rem">${tagStr}</div>`:''}
       ${tnames?`<div style="color:var(--text2);font-size:.78rem;margin-bottom:.6rem">${tnames}</div>`:''}
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" onclick="runSchedNow(${s.id})">▶ Запустить сейчас</button>
-        <button class="btn ${s.is_active?'btn-ghost':'btn-ok'} btn-sm" onclick="toggleSched(${s.id})">${s.is_active?'⏸ Пауза':'▶ Возобновить'}</button>
-        <button class="btn btn-danger btn-sm" onclick="delSched(${s.id})">Удалить</button>
+        <button class="btn btn-ghost btn-sm" onclick="runSchedNow(${s.id})">▶ Run now</button>
+        <button class="btn ${s.is_active?'btn-ghost':'btn-ok'} btn-sm" onclick="toggleSched(${s.id})">${s.is_active?'⏸ Pause':'▶ Resume'}</button>
+        <button class="btn btn-danger btn-sm" onclick="delSched(${s.id})">Delete</button>
       </div>
     </div>`;
   }).join('');
 }
 
 function openSchedModal(){
-  // Populate target list
   document.getElementById('sc-name').value='';
   document.getElementById('sc-tags').value='';
   document.getElementById('sc-preview').textContent='';
@@ -954,22 +1035,22 @@ function updateSchedPreview(){
   }):[];
   const explicit=[...document.querySelectorAll('.sc-tsel:checked')].map(c=>parseInt(c.value));
   const total=new Set([...byTag.map(t=>t.id),...explicit]);
-  document.getElementById('sc-preview').textContent=total.size?`Будет отсканировано: ${total.size} хостов`:'Выберите хосты или укажите теги';
+  document.getElementById('sc-preview').textContent=total.size?`Will scan: ${total.size} hosts`:'Select hosts or specify tags';
 }
 
 async function createSchedule(){
   const name=document.getElementById('sc-name').value.trim();
-  if(!name){toast('Укажите название',false);return;}
+  if(!name){toast('Name required',false);return;}
   const tids=[...document.querySelectorAll('.sc-tsel:checked')].map(c=>parseInt(c.value));
   const tags=document.getElementById('sc-tags').value.trim()||null;
-  if(!tids.length&&!tags){toast('Выберите хосты или укажите теги',false);return;}
+  if(!tids.length&&!tags){toast('Select hosts or specify tags',false);return;}
   try{
     await api('/schedules',{method:'POST',body:JSON.stringify({
       name,target_ids:tids,filter_tags:tags,
       scan_type:document.getElementById('sc-type').value,
       interval:document.getElementById('sc-interval').value,
     })});
-    toast('Расписание создано');hideModal('modal-sched');loadSchedules();
+    toast('Schedule created');hideModal('modal-sched');loadSchedules();
   }catch(e){toast(e.message,false);}
 }
 
@@ -978,12 +1059,12 @@ async function toggleSched(id){
   catch(e){toast(e.message,false);}
 }
 async function runSchedNow(id){
-  try{const r=await api('/schedules/'+id+'/run',{method:'POST'});toast(`Запущено сканов: ${r.launched}`);}
+  try{const r=await api('/schedules/'+id+'/run',{method:'POST'});toast(`Launched: ${r.launched} scan(s)`);}
   catch(e){toast(e.message,false);}
 }
 async function delSched(id){
-  if(!confirm('Удалить расписание?'))return;
-  try{await api('/schedules/'+id,{method:'DELETE'});toast('Удалено');loadSchedules();}
+  if(!confirm('Delete schedule?'))return;
+  try{await api('/schedules/'+id,{method:'DELETE'});toast('Deleted');loadSchedules();}
   catch(e){toast(e.message,false);}
 }
 
@@ -991,10 +1072,8 @@ async function delSched(id){
 async function loadSettings(){
   try{
     const s=await api('/settings');
-    const url=s.slack_webhook_url||'';
-    document.getElementById('slack-url').value=url;
-    const notifyOn=s.slack_notify_new_ports!=='false';
-    document.getElementById('slack-notify-chk').checked=notifyOn;
+    document.getElementById('slack-url').value=s.slack_webhook_url||'';
+    document.getElementById('slack-notify-chk').checked=s.slack_notify_new_ports!=='false';
     const isLight=(s.theme==='light');
     document.getElementById('theme-chk').checked=isLight;
     _applyTheme(isLight);
@@ -1004,7 +1083,7 @@ async function loadSettings(){
 function _applyTheme(light){
   document.documentElement.classList.toggle('light',light);
   const lbl=document.getElementById('theme-label');
-  if(lbl) lbl.textContent=light?'Светлая тема':'Тёмная тема';
+  if(lbl) lbl.textContent=light?'Light theme':'Dark theme';
 }
 
 function applyTheme(light){
@@ -1017,7 +1096,7 @@ async function saveSlack(){
   const st=document.getElementById('slack-status');
   try{
     await api('/settings',{method:'POST',body:JSON.stringify({slack_webhook_url:url||null})});
-    st.textContent='✓ Сохранено';st.className='slack-status ok';
+    st.textContent='✓ Saved';st.className='slack-status ok';
     setTimeout(()=>{st.textContent='';st.className='slack-status';},3000);
   }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
 }
@@ -1025,10 +1104,10 @@ async function saveSlack(){
 async function testSlack(){
   const url=document.getElementById('slack-url').value.trim();
   const st=document.getElementById('slack-status');
-  st.textContent='Отправка…';st.className='slack-status';
+  st.textContent='Sending…';st.className='slack-status';
   try{
     await api('/settings/test-slack',{method:'POST',body:JSON.stringify({webhook_url:url||null})});
-    st.textContent='✓ Тестовое сообщение отправлено';st.className='slack-status ok';
+    st.textContent='✓ Test message sent';st.className='slack-status ok';
   }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
 }
 
@@ -1043,7 +1122,6 @@ document.getElementById('etag-val').addEventListener('input',()=>liveTagPreview(
 document.getElementById('sc-targets-list').addEventListener('change',updateSchedPreview);
 
 // ── Init & refresh ────────────────────────────────────────────────────────────
-// Apply saved theme before first render
 api('/settings').then(s=>{if(s&&s.theme==='light')_applyTheme(true);}).catch(function(){});
 showView('dashboard');
 setInterval(()=>{
