@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Port Monitor</title>
+  <style>
+    :root {
+      --bg:     #0d1117;
+      --bg2:    #161b25;
+      --bg3:    #1c2333;
+      --bg4:    #0a0d16;
+      --border: #2a3141;
+      --text:   #e2e8f0;
+      --text2:  #b0bec5;   /* was --muted #64748b — now bright enough */
+      --text3:  #8b9dbe;
+      --accent: #6366f1;
+      --acc2:   #818cf8;
+      --danger: #ef4444;
+      --warn:   #f59e0b;
+      --ok:     #22c55e;
+      --info:   #38bdf8;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-size:.875rem;font-family:system-ui,sans-serif}
+
+    /* ── Topbar ── */
+    .topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:.6rem 1.5rem;display:flex;align-items:center;gap:1.5rem;position:sticky;top:0;z-index:100}
+    .brand{font-weight:700;font-size:1rem;color:#fff;display:flex;align-items:center;gap:.4rem}
+    .brand span{color:var(--accent);font-size:1.2rem}
+    .nav-tabs{display:flex;gap:.3rem}
+    .ntab{padding:.35rem .9rem;border-radius:.4rem;border:1px solid transparent;color:var(--text2);font-weight:500;cursor:pointer;text-decoration:none;transition:all .15s;white-space:nowrap;background:none;font-size:.875rem}
+    .ntab:hover{background:var(--bg3);color:var(--text);border-color:var(--border)}
+    .ntab.active{background:#1e2040;border-color:var(--accent);color:#fff}
+
+    /* ── Layout ── */
+    .page{padding:1.1rem 1.5rem;max-width:1500px;margin:0 auto}
+
+    /* ── Card ── */
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:.5rem;margin-bottom:.9rem}
+    .card-hd{padding:.6rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-weight:600;font-size:.85rem}
+    .card-bd{padding:.85rem 1rem}
+    .tools{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+
+    /* ── Stat cards ── */
+    .stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:.7rem;margin-bottom:.9rem}
+    @media(max-width:900px){.stats-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:600px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+    .scard{padding:1rem;text-align:center}
+    .snum{font-size:2rem;font-weight:700;line-height:1}
+    .slbl{font-size:.7rem;color:var(--text2);margin-top:.25rem;text-transform:uppercase;letter-spacing:.06em}
+
+    /* ── Tables ── */
+    .tbl-wrap{overflow-x:auto}
+    .tbl{width:100%;border-collapse:collapse}
+    .tbl th{background:var(--bg4);color:var(--text2);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;padding:.5rem .75rem;border-bottom:1px solid var(--border);white-space:nowrap}
+    .tbl td{padding:.5rem .75rem;border-bottom:1px solid #182030;vertical-align:middle}
+    .tbl tbody tr:hover{background:#1a2335}
+    .tbl tbody tr.row-scan{background:#161e30}
+    .tbl tbody tr.ports-row td{background:var(--bg4);padding:.5rem .85rem}
+    .sort-th{cursor:pointer;user-select:none}
+    .sort-th:after{content:" ↕";color:#334060}
+    .sort-th.asc:after{content:" ↑";color:var(--accent)}
+    .sort-th.desc:after{content:" ↓";color:var(--accent)}
+
+    /* ── Badges ── */
+    .bdg{display:inline-block;padding:.13rem .42rem;border-radius:.3rem;font-size:.72rem;font-weight:600;line-height:1.4}
+    .b-open{background:#7f1d1d;color:#fca5a5}
+    .b-ok{background:#14532d;color:#86efac}
+    .b-run{background:#713f12;color:#fde68a}
+    .b-fail{background:#1c1c2c;color:var(--text3)}
+    .b-pend{background:#1e1b4b;color:var(--acc2)}
+    .b-port{font-family:monospace;background:#1e2535;color:var(--warn);padding:.1rem .4rem;border-radius:.25rem;font-size:.78rem}
+    .b-svc{color:var(--info);font-size:.8rem}
+    .b-proto{background:#1a2030;color:var(--text3);padding:.1rem .32rem;border-radius:.22rem;font-size:.7rem}
+
+    /* ── Tag badges ── */
+    .tag-pill{display:inline-block;padding:.12rem .45rem;border-radius:1rem;font-size:.7rem;font-weight:600;cursor:pointer;transition:opacity .12s;margin:.05rem}
+    .tag-pill:hover{opacity:.8}
+
+    /* ── Scan pulse ── */
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .badge-scan{display:inline-flex;align-items:center;gap:.3rem;background:#0c2a4a;color:var(--info);border:1px solid #0c4a6e;border-radius:.3rem;padding:.1rem .42rem;font-size:.7rem;font-weight:600;animation:pulse 1.6s ease-in-out infinite}
+    .badge-scan .dot{width:.4rem;height:.4rem;border-radius:50%;background:var(--info)}
+
+    /* ── Expand btn ── */
+    .xbtn{background:none;border:1px solid var(--border);color:var(--text2);width:1.4rem;height:1.4rem;border-radius:.25rem;cursor:pointer;font-size:.7rem;display:inline-flex;align-items:center;justify-content:center;transition:all .12s}
+    .xbtn:hover{border-color:var(--accent);color:var(--text)}
+    .xbtn.open{border-color:var(--accent);color:var(--accent);background:#1e1f3a}
+
+    /* ── Ports inner table ── */
+    .ports-wrap{max-height:280px;overflow-y:auto}
+    .ports-tbl{width:100%;border-collapse:collapse;font-size:.8rem}
+    .ports-tbl th{color:var(--text2);font-size:.69rem;padding:.28rem .55rem;border-bottom:1px solid #1a2030;text-transform:uppercase;letter-spacing:.04em}
+    .ports-tbl td{padding:.28rem .55rem;border-bottom:1px solid #111825}
+    .no-ports{color:var(--text3);padding:.5rem;font-size:.82rem}
+
+    /* ── Buttons ── */
+    .btn{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .7rem;border-radius:.35rem;border:1px solid transparent;cursor:pointer;font-size:.8rem;font-weight:500;transition:all .12s}
+    .btn:disabled,.btn.disabled{opacity:.4;cursor:default;pointer-events:none}
+    .btn-pr{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .btn-pr:hover{background:#4f46e5}
+    .btn-sky{background:#0284c7;color:#fff}
+    .btn-sky:hover{background:#0369a1}
+    .btn-ghost{background:none;border-color:var(--border);color:var(--text2)}
+    .btn-ghost:hover{border-color:var(--accent);color:var(--text)}
+    .btn-danger{background:none;border-color:#7f1d1d;color:#fca5a5}
+    .btn-danger:hover{background:#7f1d1d;color:#fff}
+    .btn-sm{padding:.18rem .48rem;font-size:.76rem}
+    .btn-ok{background:#166534;color:#86efac;border-color:#166534}
+    .btn-ok:hover{background:#14532d}
+
+    /* ── Inputs ── */
+    .inp{background:var(--bg4);color:var(--text);border:1px solid var(--border);border-radius:.35rem;padding:.32rem .6rem;font-size:.82rem;outline:none;width:100%}
+    .inp::placeholder{color:#3a4565}
+    .inp:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(99,102,241,.2)}
+    select.inp option{background:var(--bg4);color:var(--text)}
+    .inp-sm{padding:.2rem .45rem;font-size:.78rem}
+
+    /* ── Checkbox ── */
+    .chk{width:.95rem;height:.95rem;background:var(--bg4);border:1px solid #3a4160;cursor:pointer;border-radius:.2rem;accent-color:var(--accent)}
+
+    /* ── Bulk toolbar ── */
+    #bulk-bar{display:none;align-items:center;gap:.7rem;background:var(--bg3);border:1px solid var(--border);border-radius:.4rem;padding:.42rem .85rem;margin-bottom:.6rem}
+    #bulk-bar.on{display:flex}
+
+    /* ── Tag filter bar ── */
+    .tag-filter-bar{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;padding:.5rem .85rem;border-bottom:1px solid var(--border)}
+    .tag-filter-bar span{color:var(--text3);font-size:.72rem}
+
+    /* ── Schedule cards ── */
+    .sched-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.75rem}
+    .sched-card{background:var(--bg2);border:1px solid var(--border);border-radius:.5rem;padding:.85rem 1rem}
+    .sched-name{font-weight:600;font-size:.9rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.5rem}
+    .sched-meta{font-size:.78rem;color:var(--text3);display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin-bottom:.6rem}
+    .sched-meta span{display:flex;align-items:center;gap:.25rem}
+    .sched-meta b{color:var(--text2)}
+    .interval-pill{background:#1e2040;color:var(--acc2);padding:.1rem .45rem;border-radius:.3rem;font-size:.72rem;font-weight:600}
+
+    /* ── Modal ── */
+    #modal-bd{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:900}
+    #modal-bd.on{display:block}
+    .modal-wrap{display:none;position:fixed;inset:0;z-index:901;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto}
+    .modal-wrap.on{display:flex}
+    .modal-box{background:var(--bg2);border:1px solid var(--border);border-radius:.5rem;width:100%;max-width:520px}
+    .modal-hd{padding:.72rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-weight:600}
+    .modal-bd-inner{padding:1rem}
+    .modal-ft{padding:.72rem 1rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:.5rem}
+    .close-x{background:none;border:none;color:var(--text3);font-size:1.1rem;cursor:pointer;line-height:1}
+    .close-x:hover{color:var(--text)}
+    .form-row{margin-bottom:.75rem}
+    .form-lbl{color:var(--text2);font-size:.75rem;margin-bottom:.3rem;display:block}
+    .form-lbl .req{color:var(--danger)}
+
+    /* ── Target selector in modal ── */
+    .tsel-list{max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:.35rem;background:var(--bg4)}
+    .tsel-item{display:flex;align-items:center;gap:.55rem;padding:.38rem .6rem;border-bottom:1px solid #111825;cursor:pointer}
+    .tsel-item:last-child{border-bottom:none}
+    .tsel-item:hover{background:#1a2335}
+
+    /* ── Toast ── */
+    #toast-area{position:fixed;bottom:1rem;right:1rem;z-index:9999;display:flex;flex-direction:column;gap:.4rem}
+
+    /* ── Misc ── */
+    code{font-size:.82rem;color:var(--acc2);background:#1e1f3a;padding:.1rem .32rem;border-radius:.22rem}
+    .gap{gap:.5rem}
+    .flex{display:flex;align-items:center}
+    hr.thin{border:none;border-top:1px solid var(--border);margin:.75rem 0}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span>⬡</span> Port Monitor</div>
+  <nav class="nav-tabs">
+    <button class="ntab" onclick="showView('dashboard')">Dashboard</button>
+    <button class="ntab" onclick="showView('targets')">Цели</button>
+    <button class="ntab" onclick="showView('scans')">Сканирования</button>
+    <button class="ntab" onclick="showView('schedules')">Расписание</button>
+  </nav>
+</div>
+
+<div class="page">
+
+<!-- ═══════════════════════════ DASHBOARD ════════════════════════════════════ -->
+<div id="view-dashboard">
+  <div class="stats-grid">
+    <div class="card scard"><div class="snum" style="color:var(--acc2)" id="s-targets">—</div><div class="slbl">Целей</div></div>
+    <div class="card scard"><div class="snum" style="color:#fca5a5"      id="s-vulns">—</div><div class="slbl">Уязвимостей</div></div>
+    <div class="card scard"><div class="snum" style="color:var(--warn)"  id="s-ports">—</div><div class="slbl">Открытых портов</div></div>
+    <div class="card scard"><div class="snum" style="color:var(--info)"  id="s-scans">—</div><div class="slbl">Сканирований</div></div>
+    <div class="card scard"><div class="snum" style="color:var(--ok)"    id="s-running">—</div><div class="slbl">Активных сканов</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Цели — последний скан
+      <div class="tools">
+        <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻ Обновить</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th style="width:2rem"></th>
+          <th class="sort-th" onclick="sortDash('name')">Имя</th>
+          <th class="sort-th" onclick="sortDash('host')">Хост</th>
+          <th>Теги</th>
+          <th class="sort-th" onclick="sortDash('open_ports_count')">Портов</th>
+          <th class="sort-th" onclick="sortDash('last_scan_at')">Последний скан</th>
+          <th>Статус</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="dash-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Vulnerabilities -->
+  <div class="card">
+    <div class="card-hd">Уязвимости
+      <div class="tools">
+        <select class="inp inp-sm" id="vf-host" style="width:auto;min-width:130px" onchange="loadVulns()">
+          <option value="">Все хосты</option>
+        </select>
+        <select class="inp inp-sm" id="vf-tag" style="width:auto;min-width:100px" onchange="loadVulns()">
+          <option value="">Все теги</option>
+        </select>
+        <select class="inp inp-sm" id="vf-time" style="width:auto" onchange="loadVulns()">
+          <option value="">Всё время</option>
+          <option value="24">24 ч</option>
+          <option value="168">7 дней</option>
+          <option value="720">30 дней</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadVulns()">↻</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>Хост</th><th>IP</th><th>Теги</th><th>Порт</th><th>Протокол</th>
+          <th>Сервис</th><th>Версия</th><th>Впервые</th><th>Последний раз</th>
+        </tr></thead>
+        <tbody id="vuln-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ TARGETS ══════════════════════════════════════ -->
+<div id="view-targets" style="display:none">
+  <div class="card">
+    <div class="card-hd">Добавить цель</div>
+    <div class="card-bd">
+      <form onsubmit="addTarget(event)" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:.6rem;align-items:end">
+        <div><label class="form-lbl">Название <span class="req">*</span></label>
+          <input class="inp" id="t-name" placeholder="prod-web" required></div>
+        <div><label class="form-lbl">IP / hostname <span class="req">*</span></label>
+          <input class="inp" id="t-host" placeholder="192.168.1.1" required></div>
+        <div><label class="form-lbl">Теги <span style="color:var(--text3)">(через запятую)</span></label>
+          <input class="inp" id="t-tags" placeholder="production, web, nginx">
+          <div id="t-tags-preview" style="margin-top:.3rem;min-height:1.2rem"></div>
+        </div>
+        <div><label class="form-lbl">Описание</label>
+          <input class="inp" id="t-desc" placeholder="боевой сервер, DMZ"></div>
+        <button type="submit" class="btn btn-pr" style="align-self:flex-end;white-space:nowrap">+ Добавить</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tag filter bar -->
+  <div class="card" style="margin-bottom:.6rem">
+    <div class="tag-filter-bar">
+      <span>Фильтр по тегу:</span>
+      <button class="tag-pill" id="tag-all" style="background:#1e2040;color:var(--acc2);border:1px solid var(--accent)"
+        onclick="filterByTag('')">Все</button>
+      <span id="tag-filter-pills"></span>
+    </div>
+  </div>
+
+  <!-- Bulk toolbar -->
+  <div id="bulk-bar">
+    <span style="color:var(--info);font-weight:600;font-size:.8rem" id="bulk-lbl">0 выбрано</span>
+    <select class="inp" id="bulk-type" style="width:auto">
+      <option value="tcp">TCP</option>
+      <option value="udp">UDP</option>
+      <option value="both">TCP + UDP</option>
+    </select>
+    <button class="btn btn-sky btn-sm" onclick="runBulk()">▶ Сканировать</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearSel()">Снять выбор</button>
+  </div>
+
+  <div class="card">
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th style="width:2rem"><input class="chk" type="checkbox" id="chk-all" onchange="selAll(this.checked)"></th>
+          <th style="width:2rem"></th>
+          <th>Имя</th><th>Хост</th><th>Теги</th><th>Описание</th>
+          <th>Портов</th><th>Последний скан</th><th>Статус</th><th>Действия</th>
+        </tr></thead>
+        <tbody id="targets-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SCANS ════════════════════════════════════════ -->
+<div id="view-scans" style="display:none">
+  <div class="card">
+    <div class="card-hd">История сканирований
+      <button class="btn btn-ghost btn-sm" onclick="loadScans()">↻ Обновить</button>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th style="width:2rem"></th>
+          <th class="sort-th" onclick="sortScans('id')">ID</th>
+          <th class="sort-th" onclick="sortScans('target_name')">Цель</th>
+          <th class="sort-th" onclick="sortScans('target_host')">Хост</th>
+          <th>Тип</th>
+          <th class="sort-th" onclick="sortScans('started_at')">Начало</th>
+          <th class="sort-th" onclick="sortScans('finished_at')">Конец</th>
+          <th>Статус</th>
+          <th class="sort-th" onclick="sortScans('open_ports_count')">Портов</th>
+        </tr></thead>
+        <tbody id="scans-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SCHEDULES ════════════════════════════════════ -->
+<div id="view-schedules" style="display:none">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
+    <button class="btn btn-pr" onclick="openSchedModal()">+ Новое расписание</button>
+  </div>
+  <div class="sched-grid" id="sched-grid"></div>
+  <div id="sched-empty" style="display:none;color:var(--text3);text-align:center;padding:2rem">
+    Расписаний нет. Создайте первое.
+  </div>
+</div>
+
+</div><!-- /page -->
+
+<!-- Shared modal backdrop -->
+<div id="modal-bd" onclick="hideAllModals()"></div>
+
+<!-- Scan trigger modal -->
+<div class="modal-wrap" id="modal-trig">
+  <div class="modal-box">
+    <div class="modal-hd">Запустить скан<button class="close-x" onclick="hideModal('modal-trig')">✕</button></div>
+    <div class="modal-bd-inner">
+      <div style="margin-bottom:.75rem">Цель: <code id="trig-host"></code></div>
+      <label class="form-lbl">Тип скана</label>
+      <select class="inp" id="trig-type">
+        <option value="tcp">TCP — top 1000 (без root)</option>
+        <option value="udp">UDP — top 100 (нужен root)</option>
+        <option value="both">TCP + UDP</option>
+      </select>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="hideModal('modal-trig')">Отмена</button>
+      <button class="btn btn-pr" onclick="confirmScan()">▶ Запустить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule create modal -->
+<div class="modal-wrap" id="modal-sched">
+  <div class="modal-box" style="max-width:560px">
+    <div class="modal-hd">Новое расписание<button class="close-x" onclick="hideModal('modal-sched')">✕</button></div>
+    <div class="modal-bd-inner">
+      <div class="form-row">
+        <label class="form-lbl">Название <span class="req">*</span></label>
+        <input class="inp" id="sc-name" placeholder="Daily production scan">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem" class="form-row">
+        <div>
+          <label class="form-lbl">Тип скана</label>
+          <select class="inp" id="sc-type">
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP (root)</option>
+            <option value="both">TCP + UDP</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-lbl">Расписание</label>
+          <select class="inp" id="sc-interval">
+            <option value="hourly">Каждый час</option>
+            <option value="daily" selected>Каждый день</option>
+            <option value="weekly">Каждую неделю</option>
+            <option value="monthly">Каждый месяц</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-lbl">Фильтр по тегу <span style="color:var(--text3)">(все хосты с тегом)</span></label>
+        <input class="inp" id="sc-tags" placeholder="production, web" oninput="updateSchedPreview()">
+      </div>
+
+      <div class="form-row">
+        <label class="form-lbl">Или выбрать конкретные хосты</label>
+        <div class="tsel-list" id="sc-targets-list"></div>
+      </div>
+
+      <div id="sc-preview" style="color:var(--text3);font-size:.78rem;margin-top:.3rem"></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="hideModal('modal-sched')">Отмена</button>
+      <button class="btn btn-pr" onclick="createSchedule()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit tags modal -->
+<div class="modal-wrap" id="modal-tags">
+  <div class="modal-box">
+    <div class="modal-hd">Редактировать теги<button class="close-x" onclick="hideModal('modal-tags')">✕</button></div>
+    <div class="modal-bd-inner">
+      <div style="margin-bottom:.6rem">Хост: <code id="etag-host"></code></div>
+      <label class="form-lbl">Теги (через запятую)</label>
+      <input class="inp" id="etag-val" placeholder="production, web, nginx">
+      <div id="etag-preview" style="margin-top:.4rem;min-height:1.2rem"></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="hideModal('modal-tags')">Отмена</button>
+      <button class="btn btn-pr" onclick="saveTagsEdit()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-area"></div>
+
+<script>
+const API='/api';
+let dashData=[], scansData=[], targetsData=[], vulnData=[], schedData=[], allTags=[];
+let dashSort={k:'open_ports_count',d:'desc'}, scansSort={k:'started_at',d:'desc'};
+let trigId=null, etagId=null;
+let sel=new Set(), tagFilter='';
+const EXP={d:new Set(),t:new Set(),s:new Set()};
+const PC={};  // ports cache
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function showModal(id){
+  document.getElementById('modal-bd').classList.add('on');
+  document.getElementById(id).classList.add('on');
+  document.body.style.overflow='hidden';
+}
+function hideModal(id){
+  document.getElementById(id).classList.remove('on');
+  document.getElementById('modal-bd').classList.remove('on');
+  document.body.style.overflow='';
+}
+function hideAllModals(){
+  document.querySelectorAll('.modal-wrap.on').forEach(m=>m.classList.remove('on'));
+  document.getElementById('modal-bd').classList.remove('on');
+  document.body.style.overflow='';
+}
+
+// ── Nav ───────────────────────────────────────────────────────────────────────
+function showView(v){
+  ['dashboard','targets','scans','schedules'].forEach(id=>
+    document.getElementById('view-'+id).style.display=id===v?'':'none'
+  );
+  document.querySelectorAll('.ntab').forEach(b=>{
+    const map={dashboard:'dashboard',targets:'цел',scans:'скан',schedules:'расп'};
+    b.classList.toggle('active',b.textContent.toLowerCase().includes(map[v]));
+  });
+  if(v==='dashboard') loadDashboard();
+  if(v==='targets')   loadTargets();
+  if(v==='scans')     loadScans();
+  if(v==='schedules') loadSchedules();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function api(path,opts={}){
+  const r=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts});
+  if(!r.ok){
+    const e=await r.json().catch(()=>({detail:r.statusText}));
+    let msg=e.detail;
+    if(Array.isArray(msg)) msg=msg.map(x=>x.msg||(x.loc?.slice(-1)[0])).join('; ');
+    throw new Error(msg||r.statusText);
+  }
+  if(r.status===204)return null;
+  return r.json();
+}
+function toast(msg,ok=true){
+  const d=document.createElement('div');
+  d.style.cssText=`background:${ok?'#14532d':'#7f1d1d'};color:${ok?'#86efac':'#fca5a5'};padding:.42rem .85rem;border-radius:.4rem;font-size:.8rem;min-width:220px;`;
+  d.textContent=msg;
+  document.getElementById('toast-area').appendChild(d);
+  setTimeout(()=>d.remove(),4000);
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fdt(iso){return iso?new Date(iso+'Z').toLocaleString('ru'):'—';}
+
+function statusBadge(s){
+  const m={completed:'b-ok',failed:'b-fail',running:'b-run',pending:'b-pend'};
+  return `<span class="bdg ${m[s]||'b-fail'}">${s}</span>`;
+}
+function scanBadge(st){
+  return `<span class="badge-scan"><span class="dot"></span>${st==='pending'?'ожидание':'сканирование'}</span>`;
+}
+
+// ── Tag utils ─────────────────────────────────────────────────────────────────
+function tagHue(name){
+  let h=0;
+  for(let i=0;i<name.length;i++) h=(name.charCodeAt(i)+((h<<5)-h))&0xffffffff;
+  return (h>>>0)%360;
+}
+function tagStyle(name){
+  const hue=tagHue(name);
+  return `background:hsl(${hue},50%,22%);color:hsl(${hue},70%,78%);border:1px solid hsl(${hue},45%,32%)`;
+}
+function renderTags(rawTags,onclick=''){
+  if(!rawTags) return '';
+  return rawTags.split(',').map(t=>{t=t.trim();if(!t)return '';
+    return `<span class="tag-pill" style="${tagStyle(t)}" ${onclick?`onclick="${onclick}('${esc(t)}')"`:''} title="${esc(t)}">${esc(t)}</span>`;
+  }).join('');
+}
+function liveTagPreview(inputId,previewId){
+  const val=document.getElementById(inputId).value;
+  document.getElementById(previewId).innerHTML=renderTags(val);
+}
+
+// ── Expand rows ───────────────────────────────────────────────────────────────
+async function toggleExpand(ns,rowId,scanId,cols){
+  const btnId=`xbtn-${ns}-${rowId}`, ptrId=`ptr-${ns}-${rowId}`;
+  const btn=document.getElementById(btnId), ptr=document.getElementById(ptrId);
+  if(ptr){ptr.remove();EXP[ns].delete(rowId);if(btn){btn.classList.remove('open');btn.textContent='▼';}return;}
+  EXP[ns].add(rowId);
+  if(btn){btn.classList.add('open');btn.textContent='▲';}
+  const mainTr=document.getElementById(`tr-${ns}-${rowId}`);
+  if(!mainTr)return;
+  const pTr=document.createElement('tr');pTr.id=ptrId;pTr.className='ports-row';
+  pTr.innerHTML=`<td colspan="${cols}" style="color:var(--text3);font-size:.8rem">Загрузка…</td>`;
+  mainTr.after(pTr);
+  try{const p=await fetchPorts(scanId);pTr.innerHTML=`<td colspan="${cols}">${renderPortsTable(p)}</td>`;}
+  catch(e){pTr.innerHTML=`<td colspan="${cols}" style="color:#fca5a5;font-size:.8rem">${esc(e.message)}</td>`;}
+}
+async function fetchPorts(id){if(!id)return[];if(PC[id])return PC[id];const s=await api('/scans/'+id);PC[id]=s.ports||[];return PC[id];}
+function renderPortsTable(ports){
+  if(!ports||!ports.length)return `<div class="no-ports">Открытых портов не найдено</div>`;
+  const rows=ports.slice().sort((a,b)=>a.port-b.port).map(p=>{
+    const ver=[p.product,p.version].filter(Boolean).join(' ');
+    return `<tr><td><span class="b-port">${p.port}</span></td><td><span class="b-proto">${p.protocol}</span></td>
+      <td style="color:var(--text2)">${esc(p.state)}</td>
+      <td><span class="b-svc">${esc(p.service||'—')}</span></td>
+      <td style="color:var(--text3)">${esc(ver||'—')}</td></tr>`;
+  }).join('');
+  return `<div class="ports-wrap"><table class="ports-tbl">
+    <thead><tr><th>Порт</th><th>Протокол</th><th>Состояние</th><th>Сервис</th><th>Версия</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+async function loadDashboard(){
+  try{
+    const[stats,targets,tags]=await Promise.all([api('/stats'),api('/targets'),api('/tags')]);
+    document.getElementById('s-targets').textContent=stats.total_targets;
+    document.getElementById('s-vulns').textContent=stats.active_vulns;
+    document.getElementById('s-ports').textContent=stats.total_open_ports;
+    document.getElementById('s-scans').textContent=stats.total_scans;
+    document.getElementById('s-running').textContent=stats.running_scans;
+    dashData=targets; allTags=tags;
+    renderDash();
+    populateVulnFilters(targets,tags);
+    loadVulns();
+  }catch(e){toast(e.message,false);}
+}
+function renderDash(){
+  const COLS=8;
+  const sorted=[...dashData].sort((a,b)=>{const v=x=>x[dashSort.k]??'';return dashSort.d==='asc'?(v(a)>v(b)?1:-1):(v(a)<v(b)?1:-1);});
+  document.getElementById('dash-tbody').innerHTML=sorted.map(t=>{
+    const act=!!t.active_scan_status,has=!!t.last_scan_id;
+    return `<tr id="tr-d-${t.id}" class="${act?'row-scan':''}">
+      <td>${has?`<button class="xbtn${EXP.d.has(t.id)?' open':''}" id="xbtn-d-${t.id}" onclick="toggleExpand('d',${t.id},${t.last_scan_id},${COLS})">${EXP.d.has(t.id)?'▲':'▼'}</button>`:''}</td>
+      <td>${esc(t.name)}</td>
+      <td><code>${esc(t.host)}</code></td>
+      <td>${renderTags(t.tags)}</td>
+      <td>${t.open_ports_count>0?`<span class="bdg b-open">${t.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
+      <td style="color:var(--text2)">${fdt(t.last_scan_at)}</td>
+      <td>${act?scanBadge(t.active_scan_status):has?`<span class="bdg b-ok">ok</span>`:'<span style="color:var(--text3)">—</span>'}</td>
+      <td><button class="btn btn-pr btn-sm${act?' disabled':''}" onclick="${act?'':'openTrig('+t.id+',\''+esc(t.host)+'\')'}">${act?'…':'Скан'}</button></td>
+    </tr>`;
+  }).join('');
+  sorted.forEach(t=>{if(EXP.d.has(t.id)&&t.last_scan_id)toggleExpand('d',t.id,t.last_scan_id,COLS);});
+}
+function sortDash(k){dashSort={k,d:dashSort.k===k&&dashSort.d==='desc'?'asc':'desc'};renderDash();}
+
+// ── Vulns ─────────────────────────────────────────────────────────────────────
+function populateVulnFilters(targets,tags){
+  const hSel=document.getElementById('vf-host');
+  const cur=hSel.value;
+  hSel.innerHTML='<option value="">Все хосты</option>'+
+    targets.map(t=>`<option value="${t.id}" ${cur==t.id?'selected':''}>${esc(t.name)} (${esc(t.host)})</option>`).join('');
+  const tSel=document.getElementById('vf-tag');
+  const curT=tSel.value;
+  tSel.innerHTML='<option value="">Все теги</option>'+
+    tags.map(t=>`<option value="${esc(t)}" ${curT===t?'selected':''}>${esc(t)}</option>`).join('');
+}
+async function loadVulns(){
+  const tid=document.getElementById('vf-host').value;
+  const tag=document.getElementById('vf-tag').value;
+  const h=document.getElementById('vf-time').value;
+  let q='/vulnerabilities?active_only=true';
+  if(tid) q+=`&target_id=${tid}`;
+  if(tag) q+=`&tag=${encodeURIComponent(tag)}`;
+  if(h)   q+=`&since_hours=${h}`;
+  try{vulnData=await api(q);renderVulns();}catch(e){toast(e.message,false);}
+}
+function renderVulns(){
+  if(!vulnData.length){
+    document.getElementById('vuln-tbody').innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center;padding:1.2rem">Активных уязвимостей нет</td></tr>';
+    return;
+  }
+  document.getElementById('vuln-tbody').innerHTML=vulnData.map(v=>{
+    const ver=[v.product,v.version].filter(Boolean).join(' ');
+    return `<tr>
+      <td>${esc(v.target_name||'?')}</td>
+      <td><code>${esc(v.target_host||'?')}</code></td>
+      <td>${renderTags(v.target_tags)}</td>
+      <td><span class="b-port">${v.port}</span></td>
+      <td><span class="b-proto">${v.protocol}</span></td>
+      <td><span class="b-svc">${esc(v.service||'—')}</span></td>
+      <td style="color:var(--text3)">${esc(ver||'—')}</td>
+      <td style="color:var(--text2)">${fdt(v.first_seen_at)}</td>
+      <td style="color:var(--text3)">${fdt(v.last_seen_at)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Targets ───────────────────────────────────────────────────────────────────
+async function loadTargets(){
+  try{
+    const[targets,tags]=await Promise.all([api('/targets'),api('/tags')]);
+    targetsData=targets; allTags=tags;
+    sel=new Set([...sel].filter(id=>targets.some(t=>t.id===id)));
+    renderTagFilterBar(tags);
+    renderTargets();
+  }catch(e){toast(e.message,false);}
+}
+function renderTagFilterBar(tags){
+  document.getElementById('tag-filter-pills').innerHTML=tags.map(t=>
+    `<button class="tag-pill" style="${tagStyle(t)}${tagFilter===t?';outline:2px solid #fff':''}" onclick="filterByTag('${esc(t)}')">${esc(t)}</button>`
+  ).join('');
+  document.getElementById('tag-all').style.display=tags.length?'':'none';
+}
+function filterByTag(tag){
+  tagFilter=tag;
+  const filtered=tag?targetsData.filter(t=>{
+    const tt=new Set((t.tags||'').split(',').map(x=>x.trim()).filter(Boolean));
+    return tt.has(tag);
+  }):targetsData;
+  renderTagFilterBar(allTags);
+  renderTargetsData(filtered);
+}
+function renderTargets(){renderTargetsData(tagFilter?targetsData.filter(t=>{
+  const tt=new Set((t.tags||'').split(',').map(x=>x.trim()).filter(Boolean));return tt.has(tagFilter);}):targetsData);}
+function renderTargetsData(list){
+  const COLS=10;
+  document.getElementById('targets-tbody').innerHTML=list.map(t=>{
+    const act=!!t.active_scan_status,has=!!t.last_scan_id;
+    return `<tr id="tr-t-${t.id}" class="${act?'row-scan':''}">
+      <td><input class="chk" type="checkbox" value="${t.id}" ${sel.has(t.id)?'checked':''} onchange="selToggle(${t.id},this.checked)"></td>
+      <td>${has?`<button class="xbtn${EXP.t.has(t.id)?' open':''}" id="xbtn-t-${t.id}" onclick="toggleExpand('t',${t.id},${t.last_scan_id},${COLS})">${EXP.t.has(t.id)?'▲':'▼'}</button>`:''}</td>
+      <td>${esc(t.name)}</td>
+      <td><code>${esc(t.host)}</code></td>
+      <td style="min-width:120px">${renderTags(t.tags,'filterByTag')}
+        <button class="btn btn-ghost btn-sm" style="padding:.05rem .3rem;font-size:.68rem" onclick="openTagsEdit(${t.id},'${esc(t.host)}','${esc(t.tags||'')}')">✎</button>
+      </td>
+      <td style="color:var(--text3)">${esc(t.description||'')}</td>
+      <td>${t.open_ports_count>0?`<span class="bdg b-open">${t.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
+      <td style="color:var(--text2)">${fdt(t.last_scan_at)}</td>
+      <td>${act?scanBadge(t.active_scan_status):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="display:flex;gap:.3rem">
+        <button class="btn btn-pr btn-sm${act?' disabled':''}" ${act?'':'onclick="openTrig('+t.id+',\''+esc(t.host)+'\')"'}>${act?'…':'Скан'}</button>
+        <button class="btn btn-danger btn-sm" onclick="delTarget(${t.id})">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+  updateBulk();
+}
+function selToggle(id,on){on?sel.add(id):sel.delete(id);updateBulk();
+  document.getElementById('chk-all').checked=targetsData.length>0&&targetsData.every(t=>sel.has(t.id));}
+function selAll(on){targetsData.forEach(t=>on?sel.add(t.id):sel.delete(t.id));renderTargets();}
+function clearSel(){sel.clear();renderTargets();}
+function updateBulk(){const n=sel.size;document.getElementById('bulk-bar').classList.toggle('on',n>0);document.getElementById('bulk-lbl').textContent=`${n} выбрано`;}
+async function runBulk(){
+  const type=document.getElementById('bulk-type').value;
+  let ok=0,fail=0;
+  await Promise.all([...sel].map(async id=>{try{await api('/targets/'+id+'/scan',{method:'POST',body:JSON.stringify({scan_type:type})});ok++;}catch{fail++;}}));
+  toast(`Запущено: ${ok}${fail?' | Ошибок: '+fail:''}`,!fail);
+  clearSel();setTimeout(()=>{loadTargets();loadDashboard();},800);
+}
+async function addTarget(e){
+  e.preventDefault();
+  try{
+    await api('/targets',{method:'POST',body:JSON.stringify({
+      name:document.getElementById('t-name').value.trim(),
+      host:document.getElementById('t-host').value.trim(),
+      tags:document.getElementById('t-tags').value.trim()||null,
+      description:document.getElementById('t-desc').value.trim()||null,
+    })});
+    ['t-name','t-host','t-tags','t-desc'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('t-tags-preview').innerHTML='';
+    toast('Цель добавлена');loadTargets();
+  }catch(e){toast(e.message,false);}
+}
+async function delTarget(id){
+  if(!confirm('Удалить цель?'))return;
+  try{await api('/targets/'+id,{method:'DELETE'});toast('Цель удалена');sel.delete(id);loadTargets();}
+  catch(e){toast(e.message,false);}
+}
+
+// ── Tags edit ─────────────────────────────────────────────────────────────────
+function openTagsEdit(id,host,tags){
+  etagId=id;
+  document.getElementById('etag-host').textContent=host;
+  document.getElementById('etag-val').value=tags;
+  document.getElementById('etag-preview').innerHTML=renderTags(tags);
+  showModal('modal-tags');
+}
+async function saveTagsEdit(){
+  const tags=document.getElementById('etag-val').value.trim();
+  try{await api('/targets/'+etagId+'/tags',{method:'PATCH',body:JSON.stringify({tags})});
+    toast('Теги обновлены');hideModal('modal-tags');loadTargets();}
+  catch(e){toast(e.message,false);}
+}
+
+// ── Scans ─────────────────────────────────────────────────────────────────────
+async function loadScans(){
+  try{scansData=await api('/scans');renderScans();}catch(e){toast(e.message,false);}
+}
+function renderScans(){
+  const COLS=9;
+  const sorted=[...scansData].sort((a,b)=>{const v=x=>x[scansSort.k]??'';return scansSort.d==='asc'?(v(a)>v(b)?1:-1):(v(a)<v(b)?1:-1);});
+  document.getElementById('scans-tbody').innerHTML=sorted.map(s=>{
+    const can=s.status==='completed';
+    return `<tr id="tr-s-${s.id}">
+      <td>${can?`<button class="xbtn${EXP.s.has(s.id)?' open':''}" id="xbtn-s-${s.id}" onclick="toggleExpand('s',${s.id},${s.id},${COLS})">${EXP.s.has(s.id)?'▲':'▼'}</button>`:''}</td>
+      <td style="color:var(--text2)">${s.id}</td>
+      <td>${esc(s.target_name||'?')}</td>
+      <td><code>${esc(s.target_host||'?')}</code></td>
+      <td><span class="b-proto">${s.scan_type}</span></td>
+      <td style="color:var(--text2)">${fdt(s.started_at)}</td>
+      <td style="color:var(--text2)">${fdt(s.finished_at)}</td>
+      <td>${['pending','running'].includes(s.status)?scanBadge(s.status):statusBadge(s.status)}</td>
+      <td>${s.open_ports_count>0?`<span class="bdg b-open">${s.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+function sortScans(k){scansSort={k,d:scansSort.k===k&&scansSort.d==='desc'?'asc':'desc'};renderScans();}
+
+// ── Trigger scan ──────────────────────────────────────────────────────────────
+function openTrig(id,host){trigId=id;document.getElementById('trig-host').textContent=host;showModal('modal-trig');}
+async function confirmScan(){
+  const type=document.getElementById('trig-type').value;
+  hideModal('modal-trig');
+  try{await api('/targets/'+trigId+'/scan',{method:'POST',body:JSON.stringify({scan_type:type})});
+    toast('Скан запущен');setTimeout(()=>{loadTargets();loadDashboard();loadScans();},800);}
+  catch(e){toast(e.message,false);}
+}
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+async function loadSchedules(){
+  try{schedData=await api('/schedules');renderSchedules();}catch(e){toast(e.message,false);}
+}
+function intervalLabel(i){return{hourly:'Каждый час',daily:'Каждый день',weekly:'Каждую неделю',monthly:'Каждый месяц'}[i]||i;}
+function renderSchedules(){
+  const g=document.getElementById('sched-grid');
+  const emp=document.getElementById('sched-empty');
+  if(!schedData.length){g.innerHTML='';emp.style.display='block';return;}
+  emp.style.display='none';
+  const parsed=schedData.map(s=>({...s,_ids:JSON.parse(s.target_ids||'[]')}));
+  g.innerHTML=parsed.map(s=>{
+    const tnames=s._ids.map(id=>{const t=targetsData.find(x=>x.id===id);return t?esc(t.name):'#'+id;}).join(', ');
+    const tagStr=s.filter_tags?s.filter_tags.split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="tag-pill" style="${tagStyle(t)}">${esc(t)}</span>`).join(''):'';
+    return `<div class="sched-card">
+      <div class="sched-name">
+        <span class="interval-pill">${intervalLabel(s.interval)}</span>
+        ${esc(s.name)}
+        <span style="margin-left:auto"><span class="bdg ${s.is_active?'b-ok':'b-fail'}">${s.is_active?'активно':'пауза'}</span></span>
+      </div>
+      <div class="sched-meta">
+        <span><b>Тип:</b> ${s.scan_type}</span>
+        <span><b>Следующий запуск:</b> ${fdt(s.next_run_at)}</span>
+        <span><b>Последний:</b> ${fdt(s.last_run_at)}</span>
+      </div>
+      ${tagStr?`<div style="margin-bottom:.4rem">${tagStr}</div>`:''}
+      ${tnames?`<div style="color:var(--text2);font-size:.78rem;margin-bottom:.6rem">${tnames}</div>`:''}
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="runSchedNow(${s.id})">▶ Запустить сейчас</button>
+        <button class="btn ${s.is_active?'btn-ghost':'btn-ok'} btn-sm" onclick="toggleSched(${s.id})">${s.is_active?'⏸ Пауза':'▶ Возобновить'}</button>
+        <button class="btn btn-danger btn-sm" onclick="delSched(${s.id})">Удалить</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openSchedModal(){
+  // Populate target list
+  document.getElementById('sc-name').value='';
+  document.getElementById('sc-tags').value='';
+  document.getElementById('sc-preview').textContent='';
+  const list=document.getElementById('sc-targets-list');
+  list.innerHTML=targetsData.map(t=>`
+    <label class="tsel-item">
+      <input class="chk sc-tsel" type="checkbox" value="${t.id}">
+      <span style="flex:1">${esc(t.name)}</span>
+      <code style="font-size:.75rem">${esc(t.host)}</code>
+      <span>${renderTags(t.tags)}</span>
+    </label>`).join('');
+  showModal('modal-sched');
+}
+
+function updateSchedPreview(){
+  const tags=document.getElementById('sc-tags').value;
+  const ftags=new Set(tags.split(',').map(t=>t.trim()).filter(Boolean));
+  const byTag=ftags.size?targetsData.filter(t=>{
+    const tt=new Set((t.tags||'').split(',').map(x=>x.trim()).filter(Boolean));
+    return [...ftags].some(ft=>tt.has(ft));
+  }):[];
+  const explicit=[...document.querySelectorAll('.sc-tsel:checked')].map(c=>parseInt(c.value));
+  const total=new Set([...byTag.map(t=>t.id),...explicit]);
+  document.getElementById('sc-preview').textContent=total.size?`Будет отсканировано: ${total.size} хостов`:'Выберите хосты или укажите теги';
+}
+
+async function createSchedule(){
+  const name=document.getElementById('sc-name').value.trim();
+  if(!name){toast('Укажите название',false);return;}
+  const tids=[...document.querySelectorAll('.sc-tsel:checked')].map(c=>parseInt(c.value));
+  const tags=document.getElementById('sc-tags').value.trim()||null;
+  if(!tids.length&&!tags){toast('Выберите хосты или укажите теги',false);return;}
+  try{
+    await api('/schedules',{method:'POST',body:JSON.stringify({
+      name,target_ids:tids,filter_tags:tags,
+      scan_type:document.getElementById('sc-type').value,
+      interval:document.getElementById('sc-interval').value,
+    })});
+    toast('Расписание создано');hideModal('modal-sched');loadSchedules();
+  }catch(e){toast(e.message,false);}
+}
+
+async function toggleSched(id){
+  try{await api('/schedules/'+id+'/toggle',{method:'POST'});loadSchedules();}
+  catch(e){toast(e.message,false);}
+}
+async function runSchedNow(id){
+  try{const r=await api('/schedules/'+id+'/run',{method:'POST'});toast(`Запущено сканов: ${r.launched}`);}
+  catch(e){toast(e.message,false);}
+}
+async function delSched(id){
+  if(!confirm('Удалить расписание?'))return;
+  try{await api('/schedules/'+id,{method:'DELETE'});toast('Удалено');loadSchedules();}
+  catch(e){toast(e.message,false);}
+}
+
+// ── Tag input live preview ────────────────────────────────────────────────────
+document.getElementById('t-tags').addEventListener('input',()=>liveTagPreview('t-tags','t-tags-preview'));
+document.getElementById('etag-val').addEventListener('input',()=>liveTagPreview('etag-val','etag-preview'));
+document.getElementById('sc-targets-list').addEventListener('change',updateSchedPreview);
+
+// ── Init & refresh ────────────────────────────────────────────────────────────
+showView('dashboard');
+setInterval(()=>{
+  const hasActive=dashData.some(t=>t.active_scan_status)||scansData.some(s=>['pending','running'].includes(s.status));
+  if(document.getElementById('view-dashboard').style.display!=='none') loadDashboard();
+  if(document.getElementById('view-targets').style.display!=='none'&&hasActive) loadTargets();
+  if(document.getElementById('view-scans').style.display!=='none'&&hasActive) loadScans();
+},5000);
+</script>
+</body>
+</html>

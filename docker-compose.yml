@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: portmon
+      POSTGRES_PASSWORD: portmon
+      POSTGRES_DB: portmon
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portmon"]
+      interval: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://portmon:portmon@db:5432/portmon
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app          # hot-reload в dev
+    # UDP-скан требует cap_net_raw; без него работает только TCP
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
+volumes:
+  pgdata:

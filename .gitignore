@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Docker volumes (local data)
+pgdata/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Logs
+*.log
