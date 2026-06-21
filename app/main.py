@@ -168,6 +168,37 @@ def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Schedule not found")
 
 
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+SETTINGS_KEYS = {"slack_webhook_url", "slack_notify_new_ports", "theme"}
+
+
+@app.get("/api/settings")
+def get_settings(db: Session = Depends(get_db)):
+    return crud.get_all_settings(db)
+
+
+@app.post("/api/settings")
+def save_settings(body: dict, db: Session = Depends(get_db)):
+    for k, v in body.items():
+        if k in SETTINGS_KEYS:
+            crud.set_setting(db, k, v if v is not None else None)
+    return {"ok": True}
+
+
+@app.post("/api/settings/test-slack")
+def test_slack(body: dict, db: Session = Depends(get_db)):
+    from .notifications import send_slack_message
+    webhook_url = body.get("webhook_url") or crud.get_setting(db, "slack_webhook_url")
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail="Webhook URL не указан")
+    try:
+        send_slack_message(webhook_url, ":white_check_mark: *Port Monitor*: тестовое сообщение — интеграция работает!")
+        return {"ok": True}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ── Frontend ──────────────────────────────────────────────────────────────────
 
 @app.get("/", include_in_schema=False)

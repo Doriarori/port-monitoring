@@ -125,9 +125,10 @@ def get_scan(db: Session, scan_id: int) -> models.Scan | None:
     return db.query(models.Scan).filter(models.Scan.id == scan_id).first()
 
 
-def save_scan_results(db: Session, scan: models.Scan, ports: list[dict], error: str | None = None):
+def save_scan_results(db: Session, scan: models.Scan, ports: list[dict], error: str | None = None) -> list[dict]:
     now = datetime.utcnow()
     scan.finished_at = now
+    new_ports: list[dict] = []
     if error:
         scan.status = "failed"
         scan.error_message = error
@@ -145,13 +146,14 @@ def save_scan_results(db: Session, scan: models.Scan, ports: list[dict], error: 
                 version=p.get("version"),
                 extra_info=p.get("extra_info"),
             ))
-        update_vulnerabilities(db, scan.target_id, ports, now)
+        new_ports = update_vulnerabilities(db, scan.target_id, ports, now)
     db.commit()
+    return new_ports
 
 
 # ── Vulnerabilities ───────────────────────────────────────────────────────────
 
-def update_vulnerabilities(db: Session, target_id: int, ports: list[dict], scan_time: datetime):
+def update_vulnerabilities(db: Session, target_id: int, ports: list[dict], scan_time: datetime) -> list[dict]:
     current_keys = {(p["port"], p["protocol"]) for p in ports}
     active_vulns = (
         db.query(models.Vulnerability)
@@ -160,6 +162,7 @@ def update_vulnerabilities(db: Session, target_id: int, ports: list[dict], scan_
     )
     active_map = {(v.port, v.protocol): v for v in active_vulns}
 
+    new_ports = []
     for p in ports:
         key = (p["port"], p["protocol"])
         if key in active_map:
@@ -180,10 +183,13 @@ def update_vulnerabilities(db: Session, target_id: int, ports: list[dict], scan_
                 last_seen_at=scan_time,
                 is_active=True,
             ))
+            new_ports.append(p)
 
     for key, v in active_map.items():
         if key not in current_keys:
             v.is_active = False
+
+    return new_ports
 
 
 def get_vulnerabilities(
@@ -299,6 +305,27 @@ def delete_schedule(db: Session, schedule_id: int) -> bool:
     db.delete(sched)
     db.commit()
     return True
+
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+def get_setting(db: Session, key: str) -> str | None:
+    row = db.query(models.Setting).filter(models.Setting.key == key).first()
+    return row.value if row else None
+
+
+def set_setting(db: Session, key: str, value: str | None):
+    row = db.query(models.Setting).filter(models.Setting.key == key).first()
+    if row:
+        row.value = value
+    else:
+        db.add(models.Setting(key=key, value=value))
+    db.commit()
+
+
+def get_all_settings(db: Session) -> dict:
+    rows = db.query(models.Setting).all()
+    return {r.key: r.value for r in rows}
 
 
 def trigger_schedule_now(db: Session, schedule_id: int) -> int:

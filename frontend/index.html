@@ -166,17 +166,77 @@
     .gap{gap:.5rem}
     .flex{display:flex;align-items:center}
     hr.thin{border:none;border-top:1px solid var(--border);margin:.75rem 0}
+
+    /* ── Settings page ── */
+    .settings-nav-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1rem}
+    @media(max-width:700px){.settings-nav-grid{grid-template-columns:repeat(2,1fr)}}
+    .snav-card{padding:1.1rem 1rem;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+    .snav-card:hover{border-color:var(--accent);background:var(--bg3)}
+    .snav-icon{font-size:1.6rem;margin-bottom:.35rem}
+    .snav-lbl{font-size:.8rem;font-weight:600;color:var(--text2)}
+    .integ-card{display:flex;align-items:flex-start;gap:1rem;background:var(--bg3);border:1px solid var(--border);border-radius:.45rem;padding:1rem}
+    .integ-icon{font-size:1.8rem;flex-shrink:0}
+    .integ-body{flex:1;min-width:0}
+    .integ-title{font-weight:600;margin-bottom:.2rem}
+    .integ-desc{color:var(--text3);font-size:.78rem;margin-bottom:.6rem}
+    .integ-row{display:flex;gap:.5rem;align-items:center}
+    .theme-toggle{display:flex;align-items:center;gap:1rem;padding:.85rem 0}
+    .tgl-wrap{position:relative;width:3rem;height:1.6rem;flex-shrink:0}
+    .tgl-wrap input{opacity:0;width:0;height:0;position:absolute}
+    .tgl-track{position:absolute;inset:0;background:#3a4160;border-radius:1rem;cursor:pointer;transition:background .2s}
+    .tgl-wrap input:checked~.tgl-track{background:var(--accent)}
+    .tgl-knob{position:absolute;top:.2rem;left:.2rem;width:1.2rem;height:1.2rem;background:#fff;border-radius:50%;transition:transform .2s;pointer-events:none}
+    .tgl-wrap input:checked~.tgl-track .tgl-knob{transform:translateX(1.4rem)}
+    .slack-status{margin-top:.4rem;font-size:.78rem;min-height:1.1rem}
+    .slack-status.ok{color:var(--ok)}
+    .slack-status.err{color:var(--danger)}
+
+    /* ── Light theme ── */
+    :root.light{
+      --bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8edf5;--bg4:#f4f7fa;
+      --border:#c8d3e6;--text:#1a2133;--text2:#3a4a62;--text3:#7a8da8;
+      --accent:#5b5df0;--acc2:#4f46e5;--danger:#dc2626;--warn:#b45309;--ok:#15803d;--info:#0369a1;
+    }
+    :root.light code{background:#eef2ff;color:#4338ca}
+    :root.light .tbl td{border-bottom-color:#dde4ef}
+    :root.light .tbl tbody tr:hover{background:#eef2fa}
+    :root.light .tbl tbody tr.row-scan{background:#eef4ff}
+    :root.light .badge-scan{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+    :root.light .badge-scan .dot{background:#3b82f6}
+    :root.light .b-open{background:#fee2e2;color:#991b1b}
+    :root.light .b-ok{background:#dcfce7;color:#166534}
+    :root.light .b-run{background:#fef3c7;color:#92400e}
+    :root.light .b-fail{background:#f1f5f9;color:#475569}
+    :root.light .b-pend{background:#ede9fe;color:#4c1d95}
+    :root.light .b-port{background:#fef9c3;color:#854d0e}
+    :root.light .b-proto{background:#f1f5f9;color:#475569}
+    :root.light .b-svc{color:#0369a1}
+    :root.light .sort-th:after{color:#94a3b8}
+    :root.light .ntab.active{background:#eef2ff;border-color:var(--accent)}
+    :root.light .interval-pill{background:#eef2ff;color:#4338ca}
+    :root.light .ports-tbl th{border-bottom-color:#dde4ef}
+    :root.light .ports-tbl td{border-bottom-color:#e8edf5}
+    :root.light .tsel-item{border-bottom-color:#e8edf5}
+    :root.light .tsel-item:hover{background:#f0f4f8}
+    :root.light .btn-danger{border-color:#fca5a5;color:#991b1b}
+    :root.light .btn-danger:hover{background:#fee2e2;color:#7f1d1d}
+    :root.light .btn-ok{background:#166534}
+    :root.light .tgl-track{background:#94a3b8}
+    :root.light .inp::placeholder{color:#94a3b8}
+    :root.light .chk{border-color:#94a3b8}
+    :root.light .xbtn{background:var(--bg3)}
   </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="brand"><span>⬡</span> Port Monitor</div>
+  <button class="brand" onclick="showView('settings')" style="background:none;border:none;cursor:pointer;padding:0"><span>⬡</span> Port Monitor</button>
   <nav class="nav-tabs">
     <button class="ntab" onclick="showView('dashboard')">Dashboard</button>
     <button class="ntab" onclick="showView('targets')">Цели</button>
     <button class="ntab" onclick="showView('scans')">Сканирования</button>
     <button class="ntab" onclick="showView('schedules')">Расписание</button>
+    <button class="ntab" onclick="showView('settings')" style="margin-left:.5rem">⚙ Настройки</button>
   </nav>
 </div>
 
@@ -257,13 +317,12 @@
         <div><label class="form-lbl">IP / hostname <span class="req">*</span></label>
           <input class="inp" id="t-host" placeholder="192.168.1.1" required></div>
         <div><label class="form-lbl">Теги <span style="color:var(--text3)">(через запятую)</span></label>
-          <input class="inp" id="t-tags" placeholder="production, web, nginx">
-          <div id="t-tags-preview" style="margin-top:.3rem;min-height:1.2rem"></div>
-        </div>
+          <input class="inp" id="t-tags" placeholder="production, web, nginx"></div>
         <div><label class="form-lbl">Описание</label>
           <input class="inp" id="t-desc" placeholder="боевой сервер, DMZ"></div>
-        <button type="submit" class="btn btn-pr" style="align-self:flex-end;white-space:nowrap">+ Добавить</button>
+        <button type="submit" class="btn btn-pr" style="white-space:nowrap">+ Добавить</button>
       </form>
+      <div id="t-tags-preview" style="margin-top:.4rem;min-height:1.2rem"></div>
     </div>
   </div>
 
@@ -337,6 +396,76 @@
   <div class="sched-grid" id="sched-grid"></div>
   <div id="sched-empty" style="display:none;color:var(--text3);text-align:center;padding:2rem">
     Расписаний нет. Создайте первое.
+  </div>
+</div>
+
+<!-- ═══════════════════════════ SETTINGS ══════════════════════════════════════ -->
+<div id="view-settings" style="display:none">
+
+  <!-- Quick-nav cards -->
+  <div class="settings-nav-grid">
+    <div class="card snav-card" onclick="showView('dashboard')">
+      <div class="snav-icon">📊</div>
+      <div class="snav-lbl">Dashboard</div>
+    </div>
+    <div class="card snav-card" onclick="showView('targets')">
+      <div class="snav-icon">🎯</div>
+      <div class="snav-lbl">Цели</div>
+    </div>
+    <div class="card snav-card" onclick="showView('scans')">
+      <div class="snav-icon">🔍</div>
+      <div class="snav-lbl">Сканирования</div>
+    </div>
+    <div class="card snav-card" onclick="showView('schedules')">
+      <div class="snav-icon">🗓</div>
+      <div class="snav-lbl">Расписание</div>
+    </div>
+  </div>
+
+  <!-- Appearance -->
+  <div class="card" style="margin-bottom:.9rem">
+    <div class="card-hd">Внешний вид</div>
+    <div class="card-bd">
+      <div class="theme-toggle">
+        <label class="tgl-wrap">
+          <input type="checkbox" id="theme-chk" onchange="applyTheme(this.checked)">
+          <div class="tgl-track"><div class="tgl-knob"></div></div>
+        </label>
+        <div>
+          <div style="font-weight:500" id="theme-label">Тёмная тема</div>
+          <div style="color:var(--text3);font-size:.78rem">Выберите светлую или тёмную цветовую схему</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Integrations -->
+  <div class="card">
+    <div class="card-hd">Интеграции</div>
+    <div class="card-bd" style="display:flex;flex-direction:column;gap:.75rem">
+
+      <!-- Slack -->
+      <div class="integ-card">
+        <div class="integ-icon">💬</div>
+        <div class="integ-body">
+          <div class="integ-title">Slack</div>
+          <div class="integ-desc">Уведомления при обнаружении новых открытых портов. Вставьте Incoming Webhook URL из настроек вашего Slack-приложения.</div>
+          <div class="integ-row">
+            <input class="inp" id="slack-url" placeholder="https://hooks.slack.com/services/T.../B.../..." style="flex:1;min-width:0">
+            <button class="btn btn-ghost btn-sm" onclick="testSlack()" style="white-space:nowrap">Тест</button>
+            <button class="btn btn-pr btn-sm" onclick="saveSlack()" style="white-space:nowrap">Сохранить</button>
+          </div>
+          <div>
+            <label style="display:flex;align-items:center;gap:.4rem;margin-top:.5rem;cursor:pointer;font-size:.8rem;color:var(--text2)">
+              <input class="chk" type="checkbox" id="slack-notify-chk" onchange="saveSlackNotify()">
+              Уведомлять о новых открытых портах
+            </label>
+          </div>
+          <div class="slack-status" id="slack-status"></div>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
 
@@ -460,17 +589,18 @@ function hideAllModals(){
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 function showView(v){
-  ['dashboard','targets','scans','schedules'].forEach(id=>
+  ['dashboard','targets','scans','schedules','settings'].forEach(id=>
     document.getElementById('view-'+id).style.display=id===v?'':'none'
   );
   document.querySelectorAll('.ntab').forEach(b=>{
-    const map={dashboard:'dashboard',targets:'цел',scans:'скан',schedules:'расп'};
-    b.classList.toggle('active',b.textContent.toLowerCase().includes(map[v]));
+    const map={dashboard:'dashboard',targets:'цел',scans:'скан',schedules:'расп',settings:'настр'};
+    b.classList.toggle('active',b.textContent.toLowerCase().includes(map[v]||''));
   });
   if(v==='dashboard') loadDashboard();
   if(v==='targets')   loadTargets();
   if(v==='scans')     loadScans();
   if(v==='schedules') loadSchedules();
+  if(v==='settings')  loadSettings();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -857,12 +987,64 @@ async function delSched(id){
   catch(e){toast(e.message,false);}
 }
 
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function loadSettings(){
+  try{
+    const s=await api('/settings');
+    const url=s.slack_webhook_url||'';
+    document.getElementById('slack-url').value=url;
+    const notifyOn=s.slack_notify_new_ports!=='false';
+    document.getElementById('slack-notify-chk').checked=notifyOn;
+    const isLight=(s.theme==='light');
+    document.getElementById('theme-chk').checked=isLight;
+    _applyTheme(isLight);
+  }catch(e){toast(e.message,false);}
+}
+
+function _applyTheme(light){
+  document.documentElement.classList.toggle('light',light);
+  const lbl=document.getElementById('theme-label');
+  if(lbl) lbl.textContent=light?'Светлая тема':'Тёмная тема';
+}
+
+function applyTheme(light){
+  _applyTheme(light);
+  api('/settings',{method:'POST',body:JSON.stringify({theme:light?'light':'dark'})}).catch(()=>{});
+}
+
+async function saveSlack(){
+  const url=document.getElementById('slack-url').value.trim();
+  const st=document.getElementById('slack-status');
+  try{
+    await api('/settings',{method:'POST',body:JSON.stringify({slack_webhook_url:url||null})});
+    st.textContent='✓ Сохранено';st.className='slack-status ok';
+    setTimeout(()=>{st.textContent='';st.className='slack-status';},3000);
+  }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
+}
+
+async function testSlack(){
+  const url=document.getElementById('slack-url').value.trim();
+  const st=document.getElementById('slack-status');
+  st.textContent='Отправка…';st.className='slack-status';
+  try{
+    await api('/settings/test-slack',{method:'POST',body:JSON.stringify({webhook_url:url||null})});
+    st.textContent='✓ Тестовое сообщение отправлено';st.className='slack-status ok';
+  }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
+}
+
+async function saveSlackNotify(){
+  const on=document.getElementById('slack-notify-chk').checked;
+  await api('/settings',{method:'POST',body:JSON.stringify({slack_notify_new_ports:on?'true':'false'})}).catch(()=>{});
+}
+
 // ── Tag input live preview ────────────────────────────────────────────────────
 document.getElementById('t-tags').addEventListener('input',()=>liveTagPreview('t-tags','t-tags-preview'));
 document.getElementById('etag-val').addEventListener('input',()=>liveTagPreview('etag-val','etag-preview'));
 document.getElementById('sc-targets-list').addEventListener('change',updateSchedPreview);
 
 // ── Init & refresh ────────────────────────────────────────────────────────────
+// Apply saved theme before first render
+api('/settings').then(s=>{if(s&&s.theme==='light')_applyTheme(true);}).catch(function(){});
 showView('dashboard');
 setInterval(()=>{
   const hasActive=dashData.some(t=>t.active_scan_status)||scansData.some(s=>['pending','running'].includes(s.status));
