@@ -191,6 +191,29 @@
     .slack-status.ok{color:var(--ok)}
     .slack-status.err{color:var(--danger)}
 
+    /* ── Severity badges ── */
+    .sev-high{background:#7f1d1d;color:#fca5a5;display:inline-block;padding:.13rem .42rem;border-radius:.3rem;font-size:.7rem;font-weight:600;line-height:1.4}
+    .sev-med{background:#713f12;color:#fde68a;display:inline-block;padding:.13rem .42rem;border-radius:.3rem;font-size:.7rem;font-weight:600;line-height:1.4}
+    .sev-info{background:#1e3a5f;color:#93c5fd;display:inline-block;padding:.13rem .42rem;border-radius:.3rem;font-size:.7rem;font-weight:600;line-height:1.4}
+
+    /* ── Acknowledged row ── */
+    .row-ack td{opacity:.5}
+    .b-ack{background:#14532d44;color:#86efac;display:inline-block;padding:.13rem .42rem;border-radius:.3rem;font-size:.7rem;font-weight:600;line-height:1.4}
+
+    /* ── Diff view ── */
+    .diff-added{background:#14532d22;border-left:3px solid var(--ok);padding:.3rem .6rem;margin:.15rem 0;border-radius:0 .25rem .25rem 0;font-size:.82rem}
+    .diff-removed{background:#7f1d1d22;border-left:3px solid var(--danger);padding:.3rem .6rem;margin:.15rem 0;border-radius:0 .25rem .25rem 0;font-size:.82rem}
+    .diff-section{margin-bottom:.75rem}
+    .diff-section h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:.35rem}
+
+    /* ── Pagination ── */
+    .pager{display:flex;gap:.3rem;align-items:center;padding:.5rem 1rem;border-top:1px solid var(--border);justify-content:flex-end;flex-wrap:wrap}
+    .pager-info{color:var(--text3);font-size:.76rem;margin-right:auto}
+    .page-btn{background:none;border:1px solid var(--border);color:var(--text2);padding:.18rem .5rem;border-radius:.3rem;cursor:pointer;font-size:.76rem;transition:all .12s}
+    .page-btn:hover{border-color:var(--accent);color:var(--text)}
+    .page-btn.cur{background:var(--accent);border-color:var(--accent);color:#fff;cursor:default}
+    .page-btn:disabled{opacity:.3;cursor:default;pointer-events:none}
+
     /* ── Light theme ── */
     :root.light{
       --bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8edf5;--bg4:#f4f7fa;
@@ -227,6 +250,12 @@
     :root.light .inp::placeholder{color:#94a3b8}
     :root.light .chk{border-color:#94a3b8}
     :root.light .xbtn{background:var(--bg3)}
+    :root.light .sev-high{background:#fee2e2;color:#991b1b}
+    :root.light .sev-med{background:#fef3c7;color:#92400e}
+    :root.light .sev-info{background:#dbeafe;color:#1d4ed8}
+    :root.light .b-ack{background:#dcfce7;color:#166534}
+    :root.light .diff-added{background:#dcfce744}
+    :root.light .diff-removed{background:#fee2e244}
   </style>
 </head>
 <body>
@@ -294,6 +323,7 @@
           <th>Port</th>
           <th>Service</th>
           <th>Version</th>
+          <th>Severity</th>
           <th>First seen</th>
           <th>Last seen</th>
         </tr></thead>
@@ -364,7 +394,11 @@
 <div id="view-scans" style="display:none">
   <div class="card">
     <div class="card-hd">Scan history
-      <button class="btn btn-ghost btn-sm" onclick="loadScans()">↻ Refresh</button>
+      <div class="tools">
+        <button class="btn btn-ghost btn-sm" onclick="exportScans('csv')">↓ CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportScans('json')">↓ JSON</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadScans()">↻ Refresh</button>
+      </div>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
@@ -378,6 +412,7 @@
           <th class="sort-th" onclick="sortScans('finished_at')">Finished</th>
           <th>Status</th>
           <th class="sort-th" onclick="sortScans('open_ports_count')">Ports</th>
+          <th></th>
         </tr></thead>
         <tbody id="scans-tbody"></tbody>
       </table>
@@ -396,24 +431,38 @@
         <select class="inp inp-sm" id="vf-tag" style="width:auto;min-width:100px" onchange="loadVulnsFull()">
           <option value="">All tags</option>
         </select>
+        <select class="inp inp-sm" id="vf-severity" style="width:auto" onchange="loadVulnsFull()">
+          <option value="">All severity</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="info">Info</option>
+        </select>
+        <select class="inp inp-sm" id="vf-ack" style="width:auto" onchange="loadVulnsFull()">
+          <option value="">All</option>
+          <option value="false">Unacknowledged</option>
+          <option value="true">Acknowledged</option>
+        </select>
         <select class="inp inp-sm" id="vf-time" style="width:auto" onchange="loadVulnsFull()">
           <option value="">All time</option>
           <option value="24">24h</option>
           <option value="168">7d</option>
           <option value="720">30d</option>
         </select>
+        <button class="btn btn-ghost btn-sm" onclick="exportVulns('csv')">↓ CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportVulns('json')">↓ JSON</button>
         <button class="btn btn-ghost btn-sm" onclick="loadVulnsFull()">↻ Refresh</button>
       </div>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr>
-          <th>Target</th><th>Host</th><th>Tags</th><th>Port</th><th>Proto</th>
-          <th>Service</th><th>Version</th><th>First seen</th><th>Last seen</th>
+          <th>Target</th><th>Tags</th><th>Port</th><th>Service / Version</th>
+          <th>Severity</th><th>First seen</th><th>Last seen</th><th>Status</th><th></th>
         </tr></thead>
         <tbody id="vuln-tbody"></tbody>
       </table>
     </div>
+    <div class="pager" id="vuln-pager"></div>
   </div>
 </div>
 
@@ -478,22 +527,89 @@
         <div class="integ-icon">💬</div>
         <div class="integ-body">
           <div class="integ-title">Slack</div>
-          <div class="integ-desc">Get notified when new open ports are detected. Paste an Incoming Webhook URL from your Slack app settings.</div>
+          <div class="integ-desc">Incoming Webhook from your Slack app settings.</div>
           <div class="integ-row">
             <input class="inp" id="slack-url" placeholder="https://hooks.slack.com/services/T.../B.../..." style="flex:1;min-width:0">
             <button class="btn btn-ghost btn-sm" onclick="testSlack()" style="white-space:nowrap">Test</button>
             <button class="btn btn-pr btn-sm" onclick="saveSlack()" style="white-space:nowrap">Save</button>
           </div>
-          <div>
-            <label style="display:flex;align-items:center;gap:.4rem;margin-top:.5rem;cursor:pointer;font-size:.8rem;color:var(--text2)">
-              <input class="chk" type="checkbox" id="slack-notify-chk" onchange="saveSlackNotify()">
-              Notify on new open ports
-            </label>
-          </div>
+          <label style="display:flex;align-items:center;gap:.4rem;margin-top:.5rem;cursor:pointer;font-size:.8rem;color:var(--text2)">
+            <input class="chk" type="checkbox" id="slack-notify-chk" onchange="saveSlackNotify()">
+            Notify on new open ports
+          </label>
           <div class="slack-status" id="slack-status"></div>
         </div>
       </div>
 
+      <!-- Generic webhook -->
+      <div class="integ-card">
+        <div class="integ-icon">🔗</div>
+        <div class="integ-body">
+          <div class="integ-title">Generic Webhook</div>
+          <div class="integ-desc">POST JSON payload to any URL when new open ports are detected. Payload: <code>{"event","host","ports","timestamp"}</code></div>
+          <div class="integ-row">
+            <input class="inp" id="wh-url" placeholder="https://your-service.com/webhook" style="flex:1;min-width:0">
+            <button class="btn btn-ghost btn-sm" onclick="testWebhook()" style="white-space:nowrap">Test</button>
+            <button class="btn btn-pr btn-sm" onclick="saveWebhook()" style="white-space:nowrap">Save</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:.4rem;margin-top:.5rem;cursor:pointer;font-size:.8rem;color:var(--text2)">
+            <input class="chk" type="checkbox" id="wh-notify-chk" onchange="saveWebhookNotify()">
+            Notify on new open ports
+          </label>
+          <div class="slack-status" id="wh-status"></div>
+        </div>
+      </div>
+
+      <!-- Email -->
+      <div class="integ-card">
+        <div class="integ-icon">📧</div>
+        <div class="integ-body">
+          <div class="integ-title">Email (SMTP)</div>
+          <div class="integ-desc">Send email alerts via your SMTP server.</div>
+          <div style="display:grid;grid-template-columns:1fr 80px;gap:.4rem;margin-bottom:.4rem">
+            <input class="inp" id="smtp-host" placeholder="smtp.gmail.com">
+            <input class="inp" id="smtp-port" placeholder="587" type="number">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.4rem">
+            <input class="inp" id="smtp-user" placeholder="user@gmail.com">
+            <input class="inp" id="smtp-pass" placeholder="password" type="password" autocomplete="new-password">
+          </div>
+          <div style="display:flex;gap:.4rem;margin-bottom:.4rem">
+            <input class="inp" id="smtp-to" placeholder="recipient@example.com" style="flex:1">
+            <label style="display:flex;align-items:center;gap:.3rem;white-space:nowrap;font-size:.8rem;color:var(--text2);cursor:pointer">
+              <input class="chk" type="checkbox" id="smtp-tls-chk" checked> STARTTLS
+            </label>
+          </div>
+          <div style="display:flex;gap:.4rem">
+            <button class="btn btn-ghost btn-sm" onclick="testEmail()" style="white-space:nowrap">Test</button>
+            <button class="btn btn-pr btn-sm" onclick="saveEmail()" style="white-space:nowrap">Save</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:.4rem;margin-top:.5rem;cursor:pointer;font-size:.8rem;color:var(--text2)">
+            <input class="chk" type="checkbox" id="smtp-notify-chk" onchange="saveSmtpNotify()">
+            Notify on new open ports
+          </label>
+          <div class="slack-status" id="smtp-status"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Data management -->
+  <div class="card" style="margin-top:.9rem">
+    <div class="card-hd">Data management</div>
+    <div class="card-bd">
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:500;margin-bottom:.2rem">Scan retention</div>
+          <div style="color:var(--text3);font-size:.78rem">Completed and failed scans older than this will be automatically deleted daily.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <input class="inp" type="number" id="retention-days" value="90" min="1" max="3650" style="width:80px">
+          <span style="color:var(--text2);font-size:.82rem">days</span>
+          <button class="btn btn-pr btn-sm" onclick="saveRetention()">Save</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -588,16 +704,47 @@
   </div>
 </div>
 
+<!-- Scan diff modal -->
+<div class="modal-wrap" id="modal-diff">
+  <div class="modal-box" style="max-width:620px">
+    <div class="modal-hd">Scan diff<button class="close-x" onclick="hideModal('modal-diff')">✕</button></div>
+    <div class="modal-bd-inner" id="diff-content" style="max-height:70vh;overflow-y:auto">
+      <div style="color:var(--text3)">Loading…</div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="hideModal('modal-diff')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Acknowledge modal -->
+<div class="modal-wrap" id="modal-ack">
+  <div class="modal-box">
+    <div class="modal-hd">Acknowledge vulnerability<button class="close-x" onclick="hideModal('modal-ack')">✕</button></div>
+    <div class="modal-bd-inner">
+      <div style="color:var(--text2);margin-bottom:.75rem;font-size:.85rem">Mark this port as known / accepted. It will be dimmed and excluded from alerts.</div>
+      <label class="form-lbl">Note <span style="color:var(--text3)">(optional)</span></label>
+      <input class="inp" id="ack-note" placeholder="e.g. Intentionally exposed, protected by firewall">
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="hideModal('modal-ack')">Cancel</button>
+      <button class="btn btn-ok" onclick="confirmAck()">Acknowledge</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-area"></div>
 
 <script>
 const API='/api';
 let dashData=[], scansData=[], targetsData=[], vulnData=[], vulnFullData=[], schedData=[], allTags=[];
 let dashSort={k:'open_ports_count',d:'desc'}, scansSort={k:'started_at',d:'desc'};
-let trigId=null, etagId=null;
+let trigId=null, etagId=null, ackId=null;
 let sel=new Set(), tagFilter='';
 const EXP={d:new Set(),t:new Set(),s:new Set()};
 const PC={};  // ports cache
+const VULN_PER_PAGE=50;
+let vulnPage=1;
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function showModal(id){
@@ -673,6 +820,10 @@ function timeAgo(iso){
 function statusBadge(s){
   const m={completed:'b-ok',failed:'b-fail',running:'b-run',pending:'b-pend'};
   return `<span class="bdg ${m[s]||'b-fail'}">${s}</span>`;
+}
+function severityBadge(sev){
+  const m={high:'sev-high',medium:'sev-med',info:'sev-info'};
+  return `<span class="${m[sev]||'sev-info'}">${sev||'info'}</span>`;
 }
 function scanBadge(st){
   return `<span class="badge-scan"><span class="dot"></span>${st==='pending'?'pending':'scanning'}</span>`;
@@ -781,11 +932,12 @@ function renderVulnsCompact(){
   }
   document.getElementById('vuln-dash-tbody').innerHTML=shown.map(v=>{
     const ver=[v.product,v.version].filter(Boolean).join(' ');
-    return `<tr>
+    return `<tr${v.is_acknowledged?' class="row-ack"':''}>
       <td><span style="font-weight:500">${esc(v.target_name||'?')}</span><br><code style="font-size:.75rem">${esc(v.target_host||'')}</code></td>
       <td><span class="b-port">${v.port}</span><span class="b-proto" style="margin-left:.3rem">${v.protocol}</span></td>
       <td><span class="b-svc">${esc(v.service||'—')}</span></td>
       <td style="color:var(--text3);font-size:.8rem">${esc(ver||'—')}</td>
+      <td>${severityBadge(v.severity)}</td>
       <td>${timeAgo(v.first_seen_at)}</td>
       <td>${timeAgo(v.last_seen_at)}</td>
     </tr>`;
@@ -804,7 +956,6 @@ function populateVulnFilters(targets,tags){
     tags.map(t=>`<option value="${esc(t)}" ${curT===t?'selected':''}>${esc(t)}</option>`).join('');
 }
 async function loadVulnsFull(){
-  // Ensure filters are populated
   if(!allTags.length){
     try{
       const[targets,tags]=await Promise.all([api('/targets'),api('/tags')]);
@@ -815,33 +966,61 @@ async function loadVulnsFull(){
   const tid=document.getElementById('vf-host').value;
   const tag=document.getElementById('vf-tag').value;
   const h=document.getElementById('vf-time').value;
-  let q='/vulnerabilities?active_only=true';
+  const sev=document.getElementById('vf-severity').value;
+  const ack=document.getElementById('vf-ack').value;
+  let q='/vulnerabilities?active_only=true&limit=1000';
   if(tid) q+=`&target_id=${tid}`;
   if(tag) q+=`&tag=${encodeURIComponent(tag)}`;
   if(h)   q+=`&since_hours=${h}`;
-  try{vulnFullData=await api(q);renderVulnsFull();}catch(e){toast(e.message,false);}
+  if(sev) q+=`&severity=${sev}`;
+  if(ack) q+=`&acknowledged=${ack}`;
+  try{vulnFullData=await api(q);vulnPage=1;renderVulnsFull();}catch(e){toast(e.message,false);}
 }
 function renderVulnsFull(){
+  const COLS=9;
   if(!vulnFullData.length){
     document.getElementById('vuln-tbody').innerHTML=
-      '<tr><td colspan="9" style="color:var(--text3);text-align:center;padding:1.2rem">No active vulnerabilities</td></tr>';
+      `<tr><td colspan="${COLS}" style="color:var(--text3);text-align:center;padding:1.2rem">No vulnerabilities match the current filters</td></tr>`;
+    document.getElementById('vuln-pager').innerHTML='';
     return;
   }
-  document.getElementById('vuln-tbody').innerHTML=vulnFullData.map(v=>{
+  const total=vulnFullData.length;
+  const pages=Math.ceil(total/VULN_PER_PAGE);
+  if(vulnPage>pages) vulnPage=pages;
+  const slice=vulnFullData.slice((vulnPage-1)*VULN_PER_PAGE, vulnPage*VULN_PER_PAGE);
+
+  document.getElementById('vuln-tbody').innerHTML=slice.map(v=>{
     const ver=[v.product,v.version].filter(Boolean).join(' ');
-    return `<tr>
-      <td>${esc(v.target_name||'?')}</td>
-      <td><code>${esc(v.target_host||'?')}</code></td>
+    const ackBadge=v.is_acknowledged?`<span class="b-ack" title="${esc(v.acknowledged_note||'')}">ack</span>`:'';
+    const ackBtn=v.is_acknowledged
+      ? `<button class="btn btn-ghost btn-sm" onclick="unackVuln(${v.id})" title="Remove acknowledgement">↩</button>`
+      : `<button class="btn btn-ghost btn-sm" onclick="openAck(${v.id})" title="Acknowledge">✓</button>`;
+    return `<tr${v.is_acknowledged?' class="row-ack"':''}>
+      <td><span style="font-weight:500">${esc(v.target_name||'?')}</span><br><code style="font-size:.75rem">${esc(v.target_host||'?')}</code></td>
       <td>${renderTags(v.target_tags)}</td>
-      <td><span class="b-port">${v.port}</span></td>
-      <td><span class="b-proto">${v.protocol}</span></td>
-      <td><span class="b-svc">${esc(v.service||'—')}</span></td>
-      <td style="color:var(--text3)">${esc(ver||'—')}</td>
+      <td><span class="b-port">${v.port}</span> <span class="b-proto">${v.protocol}</span></td>
+      <td><span class="b-svc">${esc(v.service||'—')}</span><br><span style="color:var(--text3);font-size:.78rem">${esc(ver||'—')}</span></td>
+      <td>${severityBadge(v.severity)}</td>
       <td>${timeAgo(v.first_seen_at)}</td>
       <td>${timeAgo(v.last_seen_at)}</td>
+      <td>${ackBadge}</td>
+      <td>${ackBtn}</td>
     </tr>`;
   }).join('');
+
+  // Pagination
+  const pager=document.getElementById('vuln-pager');
+  if(pages<=1){pager.innerHTML='';return;}
+  let btns=`<span class="pager-info">${total} total · page ${vulnPage}/${pages}</span>`;
+  btns+=`<button class="page-btn" onclick="goVulnPage(${vulnPage-1})" ${vulnPage===1?'disabled':''}>‹</button>`;
+  const start=Math.max(1,vulnPage-2), end=Math.min(pages,vulnPage+2);
+  if(start>1) btns+=`<button class="page-btn" onclick="goVulnPage(1)">1</button>${start>2?'<span style="color:var(--text3);padding:0 .2rem">…</span>':''}`;
+  for(let p=start;p<=end;p++) btns+=`<button class="page-btn${p===vulnPage?' cur':''}" onclick="goVulnPage(${p})">${p}</button>`;
+  if(end<pages) btns+=`${end<pages-1?'<span style="color:var(--text3);padding:0 .2rem">…</span>':''}<button class="page-btn" onclick="goVulnPage(${pages})">${pages}</button>`;
+  btns+=`<button class="page-btn" onclick="goVulnPage(${vulnPage+1})" ${vulnPage===pages?'disabled':''}>›</button>`;
+  pager.innerHTML=btns;
 }
+function goVulnPage(p){vulnPage=p;renderVulnsFull();}
 
 // ── Targets ───────────────────────────────────────────────────────────────────
 async function loadTargets(){
@@ -946,7 +1125,7 @@ async function loadScans(){
   try{scansData=await api('/scans');renderScans();}catch(e){toast(e.message,false);}
 }
 function renderScans(){
-  const COLS=9;
+  const COLS=10;
   const sorted=[...scansData].sort((a,b)=>{const v=x=>x[scansSort.k]??'';return scansSort.d==='asc'?(v(a)>v(b)?1:-1):(v(a)<v(b)?1:-1);});
   document.getElementById('scans-tbody').innerHTML=sorted.map(s=>{
     const can=s.status==='completed';
@@ -960,6 +1139,7 @@ function renderScans(){
       <td>${timeAgo(s.finished_at)}</td>
       <td>${['pending','running'].includes(s.status)?scanBadge(s.status):statusBadge(s.status)}</td>
       <td>${s.open_ports_count>0?`<span class="bdg b-open">${s.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
+      <td>${can?`<button class="btn btn-ghost btn-sm" onclick="openDiff(${s.id})" title="Show diff with previous scan">⇄ Diff</button>`:''}</td>
     </tr>`;
   }).join('');
 }
@@ -1072,11 +1252,26 @@ async function delSched(id){
 async function loadSettings(){
   try{
     const s=await api('/settings');
-    document.getElementById('slack-url').value=s.slack_webhook_url||'';
-    document.getElementById('slack-notify-chk').checked=s.slack_notify_new_ports!=='false';
+    // Theme
     const isLight=(s.theme==='light');
     document.getElementById('theme-chk').checked=isLight;
     _applyTheme(isLight);
+    // Slack
+    document.getElementById('slack-url').value=s.slack_webhook_url||'';
+    document.getElementById('slack-notify-chk').checked=s.slack_notify_new_ports!=='false';
+    // Webhook
+    document.getElementById('wh-url').value=s.webhook_url||'';
+    document.getElementById('wh-notify-chk').checked=s.webhook_notify_new_ports!=='false';
+    // Email
+    document.getElementById('smtp-host').value=s.smtp_host||'';
+    document.getElementById('smtp-port').value=s.smtp_port||'587';
+    document.getElementById('smtp-user').value=s.smtp_user||'';
+    document.getElementById('smtp-pass').value=s.smtp_pass||'';
+    document.getElementById('smtp-to').value=s.smtp_to||'';
+    document.getElementById('smtp-tls-chk').checked=s.smtp_tls!=='false';
+    document.getElementById('smtp-notify-chk').checked=s.smtp_notify_new_ports!=='false';
+    // Retention
+    document.getElementById('retention-days').value=s.retention_days||'90';
   }catch(e){toast(e.message,false);}
 }
 
@@ -1114,6 +1309,142 @@ async function testSlack(){
 async function saveSlackNotify(){
   const on=document.getElementById('slack-notify-chk').checked;
   await api('/settings',{method:'POST',body:JSON.stringify({slack_notify_new_ports:on?'true':'false'})}).catch(()=>{});
+}
+
+// Webhook
+async function saveWebhook(){
+  const url=document.getElementById('wh-url').value.trim();
+  const st=document.getElementById('wh-status');
+  try{
+    await api('/settings',{method:'POST',body:JSON.stringify({webhook_url:url||null})});
+    st.textContent='✓ Saved';st.className='slack-status ok';
+    setTimeout(()=>{st.textContent='';st.className='slack-status';},3000);
+  }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
+}
+async function testWebhook(){
+  const url=document.getElementById('wh-url').value.trim();
+  const st=document.getElementById('wh-status');
+  st.textContent='Sending…';st.className='slack-status';
+  try{
+    await api('/settings/test-webhook',{method:'POST',body:JSON.stringify({webhook_url:url||null})});
+    st.textContent='✓ Test sent';st.className='slack-status ok';
+  }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
+}
+async function saveWebhookNotify(){
+  const on=document.getElementById('wh-notify-chk').checked;
+  await api('/settings',{method:'POST',body:JSON.stringify({webhook_notify_new_ports:on?'true':'false'})}).catch(()=>{});
+}
+
+// Email
+async function saveEmail(){
+  const st=document.getElementById('smtp-status');
+  const body={
+    smtp_host: document.getElementById('smtp-host').value.trim()||null,
+    smtp_port: document.getElementById('smtp-port').value||'587',
+    smtp_user: document.getElementById('smtp-user').value.trim()||null,
+    smtp_pass: document.getElementById('smtp-pass').value||null,
+    smtp_to:   document.getElementById('smtp-to').value.trim()||null,
+    smtp_tls:  document.getElementById('smtp-tls-chk').checked?'true':'false',
+  };
+  try{
+    await api('/settings',{method:'POST',body:JSON.stringify(body)});
+    st.textContent='✓ Saved';st.className='slack-status ok';
+    setTimeout(()=>{st.textContent='';st.className='slack-status';},3000);
+  }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
+}
+async function testEmail(){
+  const st=document.getElementById('smtp-status');
+  st.textContent='Sending…';st.className='slack-status';
+  const body={
+    smtp_host: document.getElementById('smtp-host').value.trim()||null,
+    smtp_port: document.getElementById('smtp-port').value||'587',
+    smtp_user: document.getElementById('smtp-user').value.trim()||null,
+    smtp_pass: document.getElementById('smtp-pass').value||null,
+    smtp_to:   document.getElementById('smtp-to').value.trim()||null,
+    smtp_tls:  document.getElementById('smtp-tls-chk').checked?'true':'false',
+  };
+  try{
+    await api('/settings/test-email',{method:'POST',body:JSON.stringify(body)});
+    st.textContent='✓ Test email sent';st.className='slack-status ok';
+  }catch(e){st.textContent='✗ '+e.message;st.className='slack-status err';}
+}
+async function saveSmtpNotify(){
+  const on=document.getElementById('smtp-notify-chk').checked;
+  await api('/settings',{method:'POST',body:JSON.stringify({smtp_notify_new_ports:on?'true':'false'})}).catch(()=>{});
+}
+
+// Retention
+async function saveRetention(){
+  const days=document.getElementById('retention-days').value;
+  try{
+    await api('/settings',{method:'POST',body:JSON.stringify({retention_days:days})});
+    toast('Retention policy saved');
+  }catch(e){toast(e.message,false);}
+}
+
+// ── Acknowledge ───────────────────────────────────────────────────────────────
+function openAck(id){ackId=id;document.getElementById('ack-note').value='';showModal('modal-ack');}
+async function confirmAck(){
+  const note=document.getElementById('ack-note').value.trim();
+  try{
+    await api('/vulnerabilities/'+ackId+'/acknowledge',{method:'POST',body:JSON.stringify({note:note||null})});
+    toast('Acknowledged');hideModal('modal-ack');loadVulnsFull();
+    if(document.getElementById('view-dashboard').style.display!=='none') loadDashboard();
+  }catch(e){toast(e.message,false);}
+}
+async function unackVuln(id){
+  try{
+    await api('/vulnerabilities/'+id+'/acknowledge',{method:'DELETE'});
+    toast('Acknowledgement removed');loadVulnsFull();
+    if(document.getElementById('view-dashboard').style.display!=='none') loadDashboard();
+  }catch(e){toast(e.message,false);}
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+function exportVulns(fmt){
+  const sev=document.getElementById('vf-severity').value;
+  let q=`/vulnerabilities/export?format=${fmt}&active_only=true`;
+  if(sev) q+=`&severity=${sev}`;
+  window.open(API+q,'_blank');
+}
+function exportScans(fmt){
+  window.open(API+`/scans/export?format=${fmt}`,'_blank');
+}
+
+// ── Scan diff ─────────────────────────────────────────────────────────────────
+async function openDiff(scanId){
+  document.getElementById('diff-content').innerHTML='<div style="color:var(--text3)">Loading…</div>';
+  showModal('modal-diff');
+  try{
+    const d=await api('/scans/'+scanId+'/diff');
+    renderDiff(d,scanId);
+  }catch(e){
+    document.getElementById('diff-content').innerHTML=`<div style="color:var(--danger)">${esc(e.message)}</div>`;
+  }
+}
+function renderDiff(d,scanId){
+  let html='';
+  html+=`<div style="color:var(--text3);font-size:.78rem;margin-bottom:.75rem">`;
+  html+=`Scan <strong>#${d.scan_id}</strong> vs `;
+  html+=d.prev_scan_id?`<strong>#${d.prev_scan_id}</strong>`:'<em>no previous scan</em>';
+  html+=`</div>`;
+
+  if(d.added.length){
+    html+=`<div class="diff-section"><h4>▲ Added (${d.added.length})</h4>`;
+    html+=d.added.map(p=>`<div class="diff-added"><span class="b-port">${p.port}</span> <span class="b-proto">${p.protocol}</span> <span class="b-svc" style="margin-left:.4rem">${esc(p.service)}</span> <span style="color:var(--text3);font-size:.8rem">${esc(p.version)}</span></div>`).join('');
+    html+=`</div>`;
+  }
+  if(d.removed.length){
+    html+=`<div class="diff-section"><h4>▼ Removed (${d.removed.length})</h4>`;
+    html+=d.removed.map(p=>`<div class="diff-removed"><span class="b-port">${p.port}</span> <span class="b-proto">${p.protocol}</span> <span class="b-svc" style="margin-left:.4rem">${esc(p.service)}</span></div>`).join('');
+    html+=`</div>`;
+  }
+  if(!d.added.length&&!d.removed.length){
+    html+=`<div style="color:var(--ok);padding:.5rem 0">✓ No changes — ${d.unchanged_count} port(s) unchanged</div>`;
+  } else {
+    html+=`<div style="color:var(--text3);font-size:.78rem">${d.unchanged_count} port(s) unchanged</div>`;
+  }
+  document.getElementById('diff-content').innerHTML=html;
 }
 
 // ── Tag input live preview ────────────────────────────────────────────────────

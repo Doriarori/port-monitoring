@@ -4,6 +4,27 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from . import models, schemas
 
+# ── Severity classification ───────────────────────────────────────────────────
+
+_HIGH_PORTS = {23, 135, 137, 138, 139, 445, 1433, 1521, 3389, 4444, 4445, 5900, 5901, 6379, 27017}
+_HIGH_SVCS  = {"telnet", "ms-wbt-server", "msrdp", "vnc", "netbios", "microsoft-ds", "redis", "mongodb"}
+_MED_PORTS  = {21, 22, 25, 53, 80, 110, 143, 389, 636, 993, 995, 2181, 3306, 5432, 8080, 8443, 9200, 9300, 11211}
+_MED_SVCS   = {"ftp", "ssh", "smtp", "domain", "http", "pop3", "imap", "ldap", "mysql",
+               "postgresql", "zookeeper", "elasticsearch", "memcache", "memcached"}
+
+
+def _severity(port: int, service: str | None) -> str:
+    if port in _HIGH_PORTS:
+        return "high"
+    svc = (service or "").lower()
+    if any(h in svc for h in _HIGH_SVCS):
+        return "high"
+    if port in _MED_PORTS:
+        return "medium"
+    if any(m in svc for m in _MED_SVCS):
+        return "medium"
+    return "info"
+
 INTERVALS: dict[str, timedelta] = {
     "hourly":  timedelta(hours=1),
     "daily":   timedelta(days=1),
@@ -182,6 +203,7 @@ def update_vulnerabilities(db: Session, target_id: int, ports: list[dict], scan_
                 first_seen_at=scan_time,
                 last_seen_at=scan_time,
                 is_active=True,
+                severity=_severity(p["port"], p.get("service")),
             ))
             new_ports.append(p)
 
@@ -192,12 +214,86 @@ def update_vulnerabilities(db: Session, target_id: int, ports: list[dict], scan_
     return new_ports
 
 
+def acknowledge_vulnerability(db: Session, vuln_id: int, note: str | None = None) -> bool:
+    v = db.query(models.Vulnerability).filter(models.Vulnerability.id == vuln_id).first()
+    if not v:
+        return False
+    v.is_acknowledged = True
+    v.acknowledged_at = datetime.utcnow()
+    v.acknowledged_note = note
+    db.commit()
+    return True
+
+
+def unacknowledge_vulnerability(db: Session, vuln_id: int) -> bool:
+    v = db.query(models.Vulnerability).filter(models.Vulnerability.id == vuln_id).first()
+    if not v:
+        return False
+    v.is_acknowledged = False
+    v.acknowledged_at = None
+    v.acknowledged_note = None
+    db.commit()
+    return True
+
+
+def cleanup_old_scans(db: Session, keep_days: int = 90) -> int:
+    cutoff = datetime.utcnow() - timedelta(days=keep_days)
+    old = (
+        db.query(models.Scan)
+        .filter(
+            models.Scan.finished_at < cutoff,
+            models.Scan.status.in_(["completed", "failed"]),
+        )
+        .all()
+    )
+    count = len(old)
+    for s in old:
+        db.delete(s)
+    if count:
+        db.commit()
+    return count
+
+
+def get_scan_diff(db: Session, scan_id: int) -> dict | None:
+    scan = get_scan(db, scan_id)
+    if not scan:
+        return None
+    prev = (
+        db.query(models.Scan)
+        .filter(
+            models.Scan.target_id == scan.target_id,
+            models.Scan.status == "completed",
+            models.Scan.id < scan_id,
+        )
+        .order_by(models.Scan.finished_at.desc())
+        .first()
+    )
+    cur = {(p.port, p.protocol): p for p in scan.ports}
+    prv = {(p.port, p.protocol): p for p in (prev.ports if prev else [])}
+
+    def _p(p):
+        return {"port": p.port, "protocol": p.protocol,
+                "service": p.service or "—", "version": p.version or ""}
+
+    return {
+        "scan_id": scan_id,
+        "prev_scan_id": prev.id if prev else None,
+        "added":   [_p(p) for k, p in cur.items() if k not in prv],
+        "removed": [_p(p) for k, p in prv.items() if k not in cur],
+        "unchanged_count": sum(1 for k in cur if k in prv),
+    }
+
+
 def get_vulnerabilities(
     db: Session,
     target_id: int | None = None,
     tag_filter: str | None = None,
     since_hours: int | None = None,
     active_only: bool = True,
+    severity: str | None = None,
+    acknowledged: bool | None = None,
+    limit: int = 1000,
+    offset: int = 0,
 ) -> list[dict]:
     q = db.query(models.Vulnerability).join(
         models.Target, models.Vulnerability.target_id == models.Target.id
@@ -209,8 +305,12 @@ def get_vulnerabilities(
     if since_hours:
         cutoff = datetime.utcnow() - timedelta(hours=since_hours)
         q = q.filter(models.Vulnerability.first_seen_at >= cutoff)
+    if severity:
+        q = q.filter(models.Vulnerability.severity == severity)
+    if acknowledged is not None:
+        q = q.filter(models.Vulnerability.is_acknowledged == acknowledged)
 
-    vulns = q.order_by(models.Vulnerability.first_seen_at.desc()).all()
+    vulns = q.order_by(models.Vulnerability.first_seen_at.desc()).offset(offset).limit(limit).all()
 
     result = []
     for v in vulns:
@@ -233,6 +333,10 @@ def get_vulnerabilities(
             "first_seen_at": v.first_seen_at,
             "last_seen_at": v.last_seen_at,
             "is_active": v.is_active,
+            "severity": v.severity or "info",
+            "is_acknowledged": v.is_acknowledged,
+            "acknowledged_at": v.acknowledged_at,
+            "acknowledged_note": v.acknowledged_note,
         })
     return result
 

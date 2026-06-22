@@ -71,8 +71,24 @@ def _check_and_run():
         db.close()
 
 
+def _run_retention():
+    from .database import SessionLocal
+    from . import crud
+    db = SessionLocal()
+    try:
+        days = int(crud.get_setting(db, "retention_days") or "90")
+        deleted = crud.cleanup_old_scans(db, days)
+        if deleted:
+            logger.info("Retention cleanup: deleted %d old scans (keep_days=%d)", deleted, days)
+    except Exception as e:
+        logger.error("Retention cleanup error: %s", e)
+    finally:
+        db.close()
+
+
 def start():
     if not _scheduler.running:
-        _scheduler.add_job(_check_and_run, "interval", minutes=1, id="sched_check", replace_existing=True)
+        _scheduler.add_job(_check_and_run, "interval", minutes=1,  id="sched_check",     replace_existing=True)
+        _scheduler.add_job(_run_retention, "interval", hours=24,   id="sched_retention", replace_existing=True)
         _scheduler.start()
         logger.info("Background scheduler started")

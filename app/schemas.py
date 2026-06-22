@@ -109,6 +109,10 @@ class VulnerabilityOut(BaseModel):
     first_seen_at: datetime
     last_seen_at: datetime
     is_active: bool
+    severity: str = "info"
+    is_acknowledged: bool = False
+    acknowledged_at: datetime | None = None
+    acknowledged_note: str | None = None
 
     model_config = {"from_attributes": True}
 

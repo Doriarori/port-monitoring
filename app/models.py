@@ -63,6 +63,10 @@ class Vulnerability(Base):
     first_seen_at: Mapped[datetime] = mapped_column(DateTime)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    severity: Mapped[str] = mapped_column(String(16), default="info")
+    is_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     target: Mapped["Target"] = relationship("Target")
 

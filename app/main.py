@@ -1,6 +1,9 @@
+import csv
+import io
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 import os
 
@@ -11,8 +14,24 @@ from .tasks import do_scan
 Base.metadata.create_all(bind=engine)
 
 
+def _migrate():
+    """Add columns introduced after initial schema creation."""
+    with engine.connect() as conn:
+        conn.execute(text("""
+            ALTER TABLE vulnerabilities
+                ADD COLUMN IF NOT EXISTS severity        VARCHAR(16) NOT NULL DEFAULT 'info',
+                ADD COLUMN IF NOT EXISTS is_acknowledged BOOLEAN     NOT NULL DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMP,
+                ADD COLUMN IF NOT EXISTS acknowledged_note TEXT
+        """))
+        conn.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from .logging_config import setup as setup_logging
+    setup_logging()
+    _migrate()
     from .scheduler_bg import start as start_scheduler
     start_scheduler()
     yield
@@ -21,6 +40,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Port Monitor", version="1.0.0", docs_url="/api/docs", lifespan=lifespan)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
+
+# ── Health ────────────────────────────────────────────────────────────────────
+
+@app.get("/health", include_in_schema=False)
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ok", "db": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"DB error: {e}")
 
 
 # ── Targets ───────────────────────────────────────────────────────────────────
@@ -84,6 +114,34 @@ def start_scan(
     )
 
 
+@app.get("/api/scans/export")
+def export_scans(format: str = "json", limit: int = 5000, db: Session = Depends(get_db)):
+    scans = crud.get_scans(db, limit=limit)
+    rows = [
+        {
+            "id": s.id, "target_name": s.target.name if s.target else None,
+            "target_host": s.target.host if s.target else None,
+            "scan_type": s.scan_type, "status": s.status,
+            "started_at": str(s.started_at), "finished_at": str(s.finished_at) if s.finished_at else None,
+            "open_ports_count": s.open_ports_count, "error_message": s.error_message,
+        }
+        for s in scans
+    ]
+    if format == "csv":
+        output = io.StringIO()
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.read()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=scans.csv"},
+        )
+    return rows
+
+
 @app.get("/api/scans", response_model=list[schemas.ScanOut])
 def list_scans(target_id: int | None = None, limit: int = 100, db: Session = Depends(get_db)):
     scans = crud.get_scans(db, target_id=target_id, limit=limit)
@@ -95,6 +153,14 @@ def list_scans(target_id: int | None = None, limit: int = 100, db: Session = Dep
         status=s.status, scan_type=s.scan_type,
         open_ports_count=s.open_ports_count, error_message=s.error_message,
     ) for s in scans]
+
+
+@app.get("/api/scans/{scan_id}/diff")
+def scan_diff(scan_id: int, db: Session = Depends(get_db)):
+    result = crud.get_scan_diff(db, scan_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return result
 
 
 @app.get("/api/scans/{scan_id}", response_model=schemas.ScanOut)
@@ -118,15 +184,71 @@ def get_scan(scan_id: int, db: Session = Depends(get_db)):
 
 # ── Vulnerabilities ───────────────────────────────────────────────────────────
 
+@app.get("/api/vulnerabilities/export")
+def export_vulnerabilities(
+    format: str = "json",
+    active_only: bool = True,
+    severity: str | None = None,
+    db: Session = Depends(get_db),
+):
+    vulns = crud.get_vulnerabilities(db, active_only=active_only, severity=severity, limit=10000)
+    rows = [
+        {
+            "id": v["id"], "target_name": v["target_name"], "target_host": v["target_host"],
+            "target_tags": v["target_tags"], "port": v["port"], "protocol": v["protocol"],
+            "service": v["service"], "product": v["product"], "version": v["version"],
+            "severity": v["severity"], "is_acknowledged": v["is_acknowledged"],
+            "acknowledged_note": v["acknowledged_note"],
+            "first_seen_at": str(v["first_seen_at"]), "last_seen_at": str(v["last_seen_at"]),
+        }
+        for v in vulns
+    ]
+    if format == "csv":
+        output = io.StringIO()
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.read()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=vulnerabilities.csv"},
+        )
+    return rows
+
+
 @app.get("/api/vulnerabilities", response_model=list[schemas.VulnerabilityOut])
 def list_vulnerabilities(
     target_id: int | None = None,
     tag: str | None = None,
     since_hours: int | None = None,
     active_only: bool = True,
+    severity: str | None = None,
+    acknowledged: bool | None = None,
+    limit: int = 1000,
+    offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    return crud.get_vulnerabilities(db, target_id=target_id, tag_filter=tag, since_hours=since_hours, active_only=active_only)
+    return crud.get_vulnerabilities(
+        db, target_id=target_id, tag_filter=tag, since_hours=since_hours,
+        active_only=active_only, severity=severity, acknowledged=acknowledged,
+        limit=limit, offset=offset,
+    )
+
+
+@app.post("/api/vulnerabilities/{vuln_id}/acknowledge", status_code=200)
+def acknowledge_vuln(vuln_id: int, body: dict = {}, db: Session = Depends(get_db)):
+    if not crud.acknowledge_vulnerability(db, vuln_id, body.get("note")):
+        raise HTTPException(status_code=404, detail="Vulnerability not found")
+    return {"ok": True}
+
+
+@app.delete("/api/vulnerabilities/{vuln_id}/acknowledge", status_code=200)
+def unacknowledge_vuln(vuln_id: int, db: Session = Depends(get_db)):
+    if not crud.unacknowledge_vulnerability(db, vuln_id):
+        raise HTTPException(status_code=404, detail="Vulnerability not found")
+    return {"ok": True}
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
@@ -170,19 +292,34 @@ def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 
-SETTINGS_KEYS = {"slack_webhook_url", "slack_notify_new_ports", "theme"}
+SETTINGS_KEYS = {
+    "slack_webhook_url", "slack_notify_new_ports",
+    "webhook_url", "webhook_notify_new_ports",
+    "smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_to", "smtp_tls",
+    "smtp_notify_new_ports",
+    "theme",
+    "retention_days",
+}
 
 
 @app.get("/api/settings")
 def get_settings(db: Session = Depends(get_db)):
-    return crud.get_all_settings(db)
+    s = crud.get_all_settings(db)
+    # Never expose smtp password in plaintext
+    if "smtp_pass" in s and s["smtp_pass"]:
+        s["smtp_pass"] = "●●●●●●●●"
+    return s
 
 
 @app.post("/api/settings")
 def save_settings(body: dict, db: Session = Depends(get_db)):
     for k, v in body.items():
-        if k in SETTINGS_KEYS:
-            crud.set_setting(db, k, v if v is not None else None)
+        if k not in SETTINGS_KEYS:
+            continue
+        # Don't overwrite password if placeholder sent back
+        if k == "smtp_pass" and v == "●●●●●●●●":
+            continue
+        crud.set_setting(db, k, v if v is not None else None)
     return {"ok": True}
 
 
@@ -191,9 +328,53 @@ def test_slack(body: dict, db: Session = Depends(get_db)):
     from .notifications import send_slack_message
     webhook_url = body.get("webhook_url") or crud.get_setting(db, "slack_webhook_url")
     if not webhook_url:
-        raise HTTPException(status_code=400, detail="Webhook URL не указан")
+        raise HTTPException(status_code=400, detail="Webhook URL not set")
     try:
-        send_slack_message(webhook_url, ":white_check_mark: *Port Monitor*: тестовое сообщение — интеграция работает!")
+        send_slack_message(webhook_url, ":white_check_mark: *Port Monitor*: test message — integration working!")
+        return {"ok": True}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/settings/test-webhook")
+def test_webhook(body: dict, db: Session = Depends(get_db)):
+    from .notifications import send_webhook_message
+    from datetime import datetime, timezone
+    url = body.get("webhook_url") or crud.get_setting(db, "webhook_url")
+    if not url:
+        raise HTTPException(status_code=400, detail="Webhook URL not set")
+    try:
+        send_webhook_message(url, {
+            "event": "test",
+            "message": "Port Monitor — test notification",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"ok": True}
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/settings/test-email")
+def test_email(body: dict, db: Session = Depends(get_db)):
+    from .notifications import send_email
+    smtp_host = body.get("smtp_host") or crud.get_setting(db, "smtp_host")
+    smtp_to   = body.get("smtp_to")   or crud.get_setting(db, "smtp_to")
+    if not smtp_host or not smtp_to:
+        raise HTTPException(status_code=400, detail="SMTP host and recipient are required")
+    smtp_pass = body.get("smtp_pass") or ""
+    if smtp_pass == "●●●●●●●●":
+        smtp_pass = crud.get_setting(db, "smtp_pass") or ""
+    try:
+        send_email(
+            smtp_host=smtp_host,
+            smtp_port=int(body.get("smtp_port") or crud.get_setting(db, "smtp_port") or "587"),
+            smtp_user=body.get("smtp_user") or crud.get_setting(db, "smtp_user") or "",
+            smtp_pass=smtp_pass,
+            to_addr=smtp_to,
+            subject="[Port Monitor] Test notification",
+            body="This is a test email from Port Monitor. Your email integration is working correctly.",
+            use_tls=(body.get("smtp_tls") or crud.get_setting(db, "smtp_tls") or "true") != "false",
+        )
         return {"ok": True}
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
