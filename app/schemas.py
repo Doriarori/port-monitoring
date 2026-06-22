@@ -4,6 +4,13 @@ import ipaddress
 import re
 
 
+# ── Auth ─────────────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 # ── Targets ──────────────────────────────────────────────────────────────────
 
 class TargetCreate(BaseModel):

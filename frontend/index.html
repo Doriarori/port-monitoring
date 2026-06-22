@@ -260,6 +260,24 @@
 </head>
 <body>
 
+<!-- ═══════════════════════════ LOGIN ════════════════════════════════════════ -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;z-index:1000;background:var(--bg);align-items:center;justify-content:center;padding:1rem">
+  <form id="login-form" class="card" style="width:100%;max-width:360px;padding:1.6rem 1.5rem;margin:0">
+    <div style="text-align:center;margin-bottom:1.3rem">
+      <div style="font-size:1.6rem;color:var(--accent)">⬡</div>
+      <div style="font-weight:600;font-size:1.05rem;margin-top:.3rem">Port Monitor</div>
+      <div style="color:var(--text3);font-size:.78rem;margin-top:.2rem">Sign in to continue</div>
+    </div>
+    <label style="display:block;font-size:.74rem;color:var(--text2);margin-bottom:.25rem">Username</label>
+    <input id="login-user" name="username" class="inp" autocomplete="username" autofocus style="margin-bottom:.8rem">
+    <label style="display:block;font-size:.74rem;color:var(--text2);margin-bottom:.25rem">Password</label>
+    <input id="login-pass" name="password" class="inp" type="password" autocomplete="current-password" style="margin-bottom:1rem">
+    <div id="login-err" style="color:#fca5a5;font-size:.78rem;min-height:1.1rem;margin-bottom:.6rem"></div>
+    <button type="submit" class="btn btn-pr" style="width:100%;justify-content:center">Sign in</button>
+  </form>
+</div>
+
+<div id="app-shell" style="display:none">
 <div class="topbar">
   <button class="brand" data-view="settings" onclick="showView('settings')" style="background:none;border:none;cursor:pointer;padding:0"><span>⬡</span> Port Monitor</button>
   <nav class="nav-tabs">
@@ -269,6 +287,7 @@
     <button class="ntab" data-view="vulnerabilities"  onclick="showView('vulnerabilities')">Vulnerabilities</button>
     <button class="ntab" data-view="schedules"        onclick="showView('schedules')">Schedules</button>
     <button class="ntab" data-view="settings"         onclick="showView('settings')" style="margin-left:.5rem">⚙ Settings</button>
+    <button id="logout-btn" class="ntab" onclick="logout()" style="display:none">⎋ Logout</button>
   </nav>
 </div>
 
@@ -734,6 +753,7 @@
 </div>
 
 <div id="toast-area"></div>
+</div><!-- /app-shell -->
 
 <script>
 const API='/api';
@@ -781,7 +801,11 @@ function showView(v){
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 async function api(path,opts={}){
-  const r=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts});
+  const headers={'Content-Type':'application/json',...(opts.headers||{})};
+  const t=authToken();
+  if(t) headers['Authorization']='Bearer '+t;
+  const r=await fetch(API+path,{...opts,headers});
+  if(r.status===401){ handleAuthExpired(); throw new Error('Session expired — please sign in again'); }
   if(!r.ok){
     const e=await r.json().catch(()=>({detail:r.statusText}));
     let msg=e.detail;
@@ -1451,16 +1475,96 @@ function renderDiff(d,scanId){
 document.getElementById('t-tags').addEventListener('input',()=>liveTagPreview('t-tags','t-tags-preview'));
 document.getElementById('etag-val').addEventListener('input',()=>liveTagPreview('etag-val','etag-preview'));
 document.getElementById('sc-targets-list').addEventListener('change',updateSchedPreview);
+document.getElementById('login-form').addEventListener('submit',login);
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+function authToken(){return localStorage.getItem('pm_token')||'';}
+
+function showLogin(){
+  const ov=document.getElementById('login-overlay');
+  const wasHidden=ov.style.display==='none'||ov.style.display==='';
+  document.getElementById('app-shell').style.display='none';
+  ov.style.display='flex';
+  // Only reset fields / grab focus on a fresh open — never while the user is
+  // already typing in the form (e.g. a background 401 re-calls this).
+  if(wasHidden){
+    document.getElementById('login-pass').value='';
+    setTimeout(()=>{
+      if(!ov.contains(document.activeElement)) document.getElementById('login-user').focus();
+    },0);
+  }
+}
+function hideLogin(){
+  document.getElementById('login-overlay').style.display='none';
+  document.getElementById('app-shell').style.display='';
+}
+function handleAuthExpired(){
+  localStorage.removeItem('pm_token');
+  document.getElementById('logout-btn').style.display='none';
+  stopPolling();  // stop the 5s loop so it can't spam 401s and steal focus
+  showLogin();
+}
+async function login(e){
+  e.preventDefault();
+  const err=document.getElementById('login-err');
+  err.textContent='';
+  const username=document.getElementById('login-user').value.trim();
+  const password=document.getElementById('login-pass').value;
+  try{
+    const r=await fetch(API+'/auth/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username,password}),
+    });
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      throw new Error(d.detail||'Login failed');
+    }
+    const d=await r.json();
+    localStorage.setItem('pm_token',d.access_token);
+    hideLogin();
+    bootApp();
+  }catch(ex){ err.textContent=ex.message; }
+}
+function logout(){
+  localStorage.removeItem('pm_token');
+  document.getElementById('logout-btn').style.display='none';
+  showLogin();
+}
 
 // ── Init & refresh ────────────────────────────────────────────────────────────
-api('/settings').then(s=>{if(s&&s.theme==='light')_applyTheme(true);}).catch(function(){});
-showView('dashboard');
-setInterval(()=>{
-  const hasActive=dashData.some(t=>t.active_scan_status)||scansData.some(s=>['pending','running'].includes(s.status));
-  if(document.getElementById('view-dashboard').style.display!=='none') loadDashboard();
-  if(document.getElementById('view-targets').style.display!=='none'&&hasActive) loadTargets();
-  if(document.getElementById('view-scans').style.display!=='none'&&hasActive) loadScans();
-},5000);
+let _pollTimer=null;
+function startPolling(){
+  if(_pollTimer) return;
+  _pollTimer=setInterval(()=>{
+    const hasActive=dashData.some(t=>t.active_scan_status)||scansData.some(s=>['pending','running'].includes(s.status));
+    if(document.getElementById('view-dashboard').style.display!=='none') loadDashboard();
+    if(document.getElementById('view-targets').style.display!=='none'&&hasActive) loadTargets();
+    if(document.getElementById('view-scans').style.display!=='none'&&hasActive) loadScans();
+  },5000);
+}
+function stopPolling(){
+  if(_pollTimer){ clearInterval(_pollTimer); _pollTimer=null; }
+}
+let AUTH_ON=true;
+function bootApp(){
+  hideLogin();
+  document.getElementById('logout-btn').style.display=AUTH_ON?'':'none';
+  api('/settings').then(s=>{if(s&&s.theme==='light')_applyTheme(true);}).catch(function(){});
+  showView('dashboard');
+  startPolling();
+}
+async function initAuth(){
+  try{
+    const r=await fetch(API+'/auth/config');
+    if(r.ok) AUTH_ON=(await r.json()).auth_enabled;
+  }catch(e){}
+  if(!AUTH_ON){ bootApp(); return; }
+  if(!authToken()){ showLogin(); return; }
+  try{ await api('/auth/me'); bootApp(); }
+  catch(e){ /* api() already showed the login overlay on 401 */ }
+}
+initAuth();
 </script>
 </body>
 </html>

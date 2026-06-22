@@ -1,14 +1,14 @@
 import csv
 import io
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 import os
 
 from .database import engine, get_db, Base
-from . import crud, schemas, models
+from . import crud, schemas, models, auth
 from .tasks import do_scan
 
 Base.metadata.create_all(bind=engine)
@@ -40,6 +40,45 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Port Monitor", version="1.0.0", docs_url="/api/docs", lifespan=lifespan)
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
+
+# ── Auth ────────────────────────────────────────────────────────────────────
+
+@app.middleware("http")
+async def auth_guard(request: Request, call_next):
+    """Require a valid bearer token for protected /api endpoints."""
+    if request.method == "OPTIONS" or not auth.requires_auth(request.url.path):
+        return await call_next(request)
+    try:
+        token = auth.token_from_header(request.headers.get("Authorization"))
+        auth.verify_token(token)
+    except auth.AuthError as e:
+        return JSONResponse({"detail": e.detail}, status_code=401)
+    return await call_next(request)
+
+
+@app.get("/api/auth/config", include_in_schema=False)
+def auth_config():
+    """Public: lets the UI know whether to show the login screen."""
+    return {"auth_enabled": auth.AUTH_ENABLED and auth.is_configured()}
+
+
+@app.post("/api/auth/login")
+def login(body: schemas.LoginRequest):
+    if not auth.authenticate(body.username, body.password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = auth.create_access_token(body.username)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": auth.JWT_EXPIRE_MINUTES * 60,
+    }
+
+
+@app.get("/api/auth/me")
+def auth_me():
+    """Protected by the middleware — a 200 here confirms the token is valid."""
+    return {"username": auth.ADMIN_USERNAME}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
