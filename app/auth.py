@@ -9,9 +9,13 @@ import logging
 import os
 import time
 
+import bcrypt
 import jwt
 
 logger = logging.getLogger(__name__)
+
+ROLE_ADMIN    = "admin"
+ROLE_READONLY = "readonly"
 
 AUTH_ENABLED       = os.getenv("AUTH_ENABLED", "true").lower() not in ("false", "0", "no")
 ADMIN_USERNAME     = os.getenv("ADMIN_USERNAME", "admin")
@@ -48,8 +52,12 @@ def requires_auth(path: str) -> bool:
     return path not in _EXEMPT
 
 
-def authenticate(username: str, password: str) -> bool:
-    """Constant-time check of submitted credentials against the env config."""
+def authenticate_env(username: str, password: str) -> bool:
+    """Constant-time check against the env-configured bootstrap admin.
+
+    Always accepted (as admin) so a misconfigured/empty users table can never
+    lock everyone out.
+    """
     if not is_configured():
         logger.warning("Login attempt but auth is not configured (ADMIN_PASSWORD/JWT_SECRET missing)")
         return False
@@ -58,9 +66,20 @@ def authenticate(username: str, password: str) -> bool:
     return user_ok and pass_ok
 
 
-def create_access_token(subject: str) -> str:
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode(), password_hash.encode())
+    except (ValueError, TypeError):
+        return False
+
+
+def create_access_token(subject: str, role: str) -> str:
     now = int(time.time())
-    payload = {"sub": subject, "iat": now, "exp": now + JWT_EXPIRE_MINUTES * 60}
+    payload = {"sub": subject, "role": role, "iat": now, "exp": now + JWT_EXPIRE_MINUTES * 60}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 

@@ -6,9 +6,70 @@ import re
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
+ROLES = ("admin", "readonly")
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str = "readonly"
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        v = v.strip()
+        if not re.match(r"^[A-Za-z0-9_.\-]{3,64}$", v):
+            raise ValueError("Username must be 3-64 chars: letters, digits, . _ -")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in ROLES:
+            raise ValueError(f"role must be one of {ROLES}")
+        return v
+
+
+class UserUpdate(BaseModel):
+    password: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str | None) -> str | None:
+        if v is not None and len(v) < 6:
+            raise ValueError("Password must be at least 6 characters")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str | None) -> str | None:
+        if v is not None and v not in ROLES:
+            raise ValueError(f"role must be one of {ROLES}")
+        return v
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ── Targets ──────────────────────────────────────────────────────────────────

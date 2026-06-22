@@ -279,14 +279,16 @@
 
 <div id="app-shell" style="display:none">
 <div class="topbar">
-  <button class="brand" data-view="settings" onclick="showView('settings')" style="background:none;border:none;cursor:pointer;padding:0"><span>⬡</span> Port Monitor</button>
+  <button class="brand" onclick="showView('dashboard')" style="background:none;border:none;cursor:pointer;padding:0"><span>⬡</span> Port Monitor</button>
   <nav class="nav-tabs">
     <button class="ntab" data-view="dashboard"       onclick="showView('dashboard')">Dashboard</button>
     <button class="ntab" data-view="targets"          onclick="showView('targets')">Targets</button>
     <button class="ntab" data-view="scans"            onclick="showView('scans')">Scans</button>
     <button class="ntab" data-view="vulnerabilities"  onclick="showView('vulnerabilities')">Vulnerabilities</button>
     <button class="ntab" data-view="schedules"        onclick="showView('schedules')">Schedules</button>
-    <button class="ntab" data-view="settings"         onclick="showView('settings')" style="margin-left:.5rem">⚙ Settings</button>
+    <button class="ntab admin-only" data-view="users"  onclick="showView('users')">👥 Users</button>
+    <button class="ntab admin-only" data-view="settings" onclick="showView('settings')" style="margin-left:.5rem">⚙ Settings</button>
+    <span id="user-label" class="ntab" style="display:none;cursor:default;margin-left:.5rem"></span>
     <button id="logout-btn" class="ntab" onclick="logout()" style="display:none">⎋ Logout</button>
   </nav>
 </div>
@@ -354,7 +356,7 @@
 
 <!-- ═══════════════════════════ TARGETS ══════════════════════════════════════ -->
 <div id="view-targets" style="display:none">
-  <div class="card">
+  <div class="card admin-only">
     <div class="card-hd">Add target</div>
     <div class="card-bd">
       <form onsubmit="addTarget(event)" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:.6rem;align-items:end">
@@ -488,7 +490,7 @@
 <!-- ═══════════════════════════ SCHEDULES ════════════════════════════════════ -->
 <div id="view-schedules" style="display:none">
   <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem">
-    <button class="btn btn-pr" onclick="openSchedModal()">+ New schedule</button>
+    <button class="btn btn-pr admin-only" onclick="openSchedModal()">+ New schedule</button>
   </div>
   <div class="sched-grid" id="sched-grid"></div>
   <div id="sched-empty" style="display:none;color:var(--text3);text-align:center;padding:2rem">
@@ -629,6 +631,41 @@
           <button class="btn btn-pr btn-sm" onclick="saveRetention()">Save</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ USERS ════════════════════════════════════════ -->
+<div id="view-users" style="display:none">
+  <div class="card admin-only">
+    <div class="card-hd">Add user</div>
+    <div class="card-bd">
+      <form id="user-form" style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:.6rem;align-items:end">
+        <div><label class="form-lbl">Username <span class="req">*</span></label>
+          <input class="inp" id="u-name" placeholder="alice" autocomplete="off" required></div>
+        <div><label class="form-lbl">Password <span class="req">*</span></label>
+          <input class="inp" id="u-pass" type="password" placeholder="min 6 chars" autocomplete="new-password" required></div>
+        <div><label class="form-lbl">Role</label>
+          <select class="inp" id="u-role" style="width:auto">
+            <option value="readonly">read-only</option>
+            <option value="admin">admin</option>
+          </select></div>
+        <button type="submit" class="btn btn-pr" style="white-space:nowrap">+ Add user</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">Users
+      <div class="tools"><button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻ Refresh</button></div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -784,8 +821,10 @@ function hideAllModals(){
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
+const ADMIN_VIEWS=['settings','users'];
 function showView(v){
-  ['dashboard','targets','scans','vulnerabilities','schedules','settings'].forEach(id=>
+  if(!isAdmin() && ADMIN_VIEWS.includes(v)) v='dashboard';  // readonly can't reach admin views
+  ['dashboard','targets','scans','vulnerabilities','schedules','settings','users'].forEach(id=>
     document.getElementById('view-'+id).style.display=id===v?'':'none'
   );
   document.querySelectorAll('.ntab[data-view]').forEach(b=>{
@@ -797,6 +836,7 @@ function showView(v){
   if(v==='vulnerabilities') loadVulnsFull();
   if(v==='schedules')       loadSchedules();
   if(v==='settings')        loadSettings();
+  if(v==='users')           loadUsers();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1083,7 +1123,7 @@ function renderTargetsData(list){
       <td>${esc(t.name)}</td>
       <td><code>${esc(t.host)}</code></td>
       <td style="min-width:120px">${renderTags(t.tags,'filterByTag')}
-        <button class="btn btn-ghost btn-sm" style="padding:.05rem .3rem;font-size:.68rem" onclick="openTagsEdit(${t.id},'${esc(t.host)}','${esc(t.tags||'')}')">✎</button>
+        ${isAdmin()?`<button class="btn btn-ghost btn-sm" style="padding:.05rem .3rem;font-size:.68rem" onclick="openTagsEdit(${t.id},'${esc(t.host)}','${esc(t.tags||'')}')">✎</button>`:''}
       </td>
       <td style="color:var(--text3)">${esc(t.description||'')}</td>
       <td>${t.open_ports_count>0?`<span class="bdg b-open">${t.open_ports_count}</span>`:'<span style="color:var(--text3)">0</span>'}</td>
@@ -1091,7 +1131,7 @@ function renderTargetsData(list){
       <td>${act?scanBadge(t.active_scan_status):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="display:flex;gap:.3rem">
         <button class="btn btn-pr btn-sm${act?' disabled':''}" ${act?'':'onclick="openTrig('+t.id+',\''+esc(t.host)+'\')"'}>${act?'…':'Scan'}</button>
-        <button class="btn btn-danger btn-sm" onclick="delTarget(${t.id})">✕</button>
+        ${isAdmin()?`<button class="btn btn-danger btn-sm" onclick="delTarget(${t.id})">✕</button>`:''}
       </td>
     </tr>`;
   }).join('');
@@ -1208,8 +1248,8 @@ function renderSchedules(){
       ${tnames?`<div style="color:var(--text2);font-size:.78rem;margin-bottom:.6rem">${tnames}</div>`:''}
       <div style="display:flex;gap:.4rem;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="runSchedNow(${s.id})">▶ Run now</button>
-        <button class="btn ${s.is_active?'btn-ghost':'btn-ok'} btn-sm" onclick="toggleSched(${s.id})">${s.is_active?'⏸ Pause':'▶ Resume'}</button>
-        <button class="btn btn-danger btn-sm" onclick="delSched(${s.id})">Delete</button>
+        ${isAdmin()?`<button class="btn ${s.is_active?'btn-ghost':'btn-ok'} btn-sm" onclick="toggleSched(${s.id})">${s.is_active?'⏸ Pause':'▶ Resume'}</button>
+        <button class="btn btn-danger btn-sm" onclick="delSched(${s.id})">Delete</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1476,9 +1516,22 @@ document.getElementById('t-tags').addEventListener('input',()=>liveTagPreview('t
 document.getElementById('etag-val').addEventListener('input',()=>liveTagPreview('etag-val','etag-preview'));
 document.getElementById('sc-targets-list').addEventListener('change',updateSchedPreview);
 document.getElementById('login-form').addEventListener('submit',login);
+document.getElementById('user-form').addEventListener('submit',createUser);
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 function authToken(){return localStorage.getItem('pm_token')||'';}
+let userRole='admin';   // default when auth is disabled → full access
+function isAdmin(){return userRole==='admin';}
+function applyRoleVisibility(){
+  const admin=isAdmin();
+  document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=admin?'':'none'; });
+}
+function setUserLabel(me){
+  const el=document.getElementById('user-label');
+  if(!me){ el.style.display='none'; return; }
+  el.textContent=`${me.username} · ${me.role==='admin'?'admin':'read-only'}`;
+  el.style.display='';
+}
 
 function showLogin(){
   const ov=document.getElementById('login-overlay');
@@ -1522,7 +1575,6 @@ async function login(e){
     }
     const d=await r.json();
     localStorage.setItem('pm_token',d.access_token);
-    hideLogin();
     bootApp();
   }catch(ex){ err.textContent=ex.message; }
 }
@@ -1547,10 +1599,22 @@ function stopPolling(){
   if(_pollTimer){ clearInterval(_pollTimer); _pollTimer=null; }
 }
 let AUTH_ON=true;
-function bootApp(){
+async function bootApp(){
+  if(AUTH_ON){
+    let me;
+    try{ me=await api('/auth/me'); }       // verifies token; on 401 api() shows login + throws
+    catch(e){ return; }
+    userRole=me.role||'admin';
+    setUserLabel(me);
+  } else {
+    userRole='admin';
+    setUserLabel(null);
+  }
   hideLogin();
   document.getElementById('logout-btn').style.display=AUTH_ON?'':'none';
-  api('/settings').then(s=>{if(s&&s.theme==='light')_applyTheme(true);}).catch(function(){});
+  applyRoleVisibility();
+  // Settings is admin-only; only admins can read the theme preference.
+  if(isAdmin()) api('/settings').then(s=>{if(s&&s.theme==='light')_applyTheme(true);}).catch(function(){});
   showView('dashboard');
   startPolling();
 }
@@ -1561,9 +1625,58 @@ async function initAuth(){
   }catch(e){}
   if(!AUTH_ON){ bootApp(); return; }
   if(!authToken()){ showLogin(); return; }
-  try{ await api('/auth/me'); bootApp(); }
-  catch(e){ /* api() already showed the login overlay on 401 */ }
+  bootApp();   // bootApp verifies the token via /auth/me
 }
+
+// ── Users (admin) ───────────────────────────────────────────────────────────
+let usersData=[];
+async function loadUsers(){
+  try{ usersData=await api('/users'); }catch(e){ toast(e.message,false); return; }
+  renderUsers();
+}
+function renderUsers(){
+  const tb=document.getElementById('users-tbody');
+  if(!usersData.length){ tb.innerHTML='<tr><td colspan="5" class="no-ports">No users.</td></tr>'; return; }
+  tb.innerHTML=usersData.map(u=>`<tr>
+    <td>${esc(u.username)}</td>
+    <td>${u.role==='admin'?'<span class="bdg b-pend">admin</span>':'<span class="bdg b-fail">read-only</span>'}</td>
+    <td>${u.is_active?'<span class="bdg b-ok">active</span>':'<span class="bdg b-fail">disabled</span>'}</td>
+    <td>${timeAgo(u.created_at)}</td>
+    <td style="display:flex;gap:.3rem;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="changeUserRole(${u.id},'${u.role==='admin'?'readonly':'admin'}')">${u.role==='admin'?'→ read-only':'→ admin'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleUserActive(${u.id},${u.is_active?'false':'true'})">${u.is_active?'Disable':'Enable'}</button>
+      <button class="btn btn-danger btn-sm" onclick="delUser(${u.id},'${esc(u.username)}')">✕</button>
+    </td>
+  </tr>`).join('');
+}
+async function createUser(e){
+  e.preventDefault();
+  const username=document.getElementById('u-name').value.trim();
+  const password=document.getElementById('u-pass').value;
+  const role=document.getElementById('u-role').value;
+  try{
+    await api('/users',{method:'POST',body:JSON.stringify({username,password,role})});
+    document.getElementById('u-name').value='';
+    document.getElementById('u-pass').value='';
+    document.getElementById('u-role').value='readonly';
+    toast('User created');
+    loadUsers();
+  }catch(ex){ toast(ex.message,false); }
+}
+async function changeUserRole(id,role){
+  try{ await api('/users/'+id,{method:'PATCH',body:JSON.stringify({role})}); toast('Role updated'); loadUsers(); }
+  catch(ex){ toast(ex.message,false); }
+}
+async function toggleUserActive(id,active){
+  try{ await api('/users/'+id,{method:'PATCH',body:JSON.stringify({is_active:active})}); toast(active?'User enabled':'User disabled'); loadUsers(); }
+  catch(ex){ toast(ex.message,false); }
+}
+async function delUser(id,name){
+  if(!confirm('Delete user "'+name+'"?')) return;
+  try{ await api('/users/'+id,{method:'DELETE'}); toast('User deleted'); loadUsers(); }
+  catch(ex){ toast(ex.message,false); }
+}
+
 initAuth();
 </script>
 </body>

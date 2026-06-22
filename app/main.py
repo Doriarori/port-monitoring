@@ -7,9 +7,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 import os
 
-from .database import engine, get_db, Base
+from .database import engine, get_db, Base, SessionLocal
 from . import crud, schemas, models, auth
 from .tasks import do_scan
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
@@ -27,11 +31,25 @@ def _migrate():
         conn.commit()
 
 
+def _seed_admin():
+    """Create the bootstrap admin from env vars when the users table is empty."""
+    if not auth.is_configured():
+        return
+    db = SessionLocal()
+    try:
+        if db.query(models.User).count() == 0:
+            crud.create_user(db, auth.ADMIN_USERNAME, auth.ADMIN_PASSWORD, auth.ROLE_ADMIN)
+            logger.info("Seeded bootstrap admin user '%s' from env", auth.ADMIN_USERNAME)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from .logging_config import setup as setup_logging
     setup_logging()
     _migrate()
+    _seed_admin()
     from .scheduler_bg import start as start_scheduler
     start_scheduler()
     yield
@@ -47,14 +65,26 @@ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 @app.middleware("http")
 async def auth_guard(request: Request, call_next):
     """Require a valid bearer token for protected /api endpoints."""
+    request.state.user = None
     if request.method == "OPTIONS" or not auth.requires_auth(request.url.path):
         return await call_next(request)
     try:
         token = auth.token_from_header(request.headers.get("Authorization"))
-        auth.verify_token(token)
+        request.state.user = auth.verify_token(token)
     except auth.AuthError as e:
         return JSONResponse({"detail": e.detail}, status_code=401)
     return await call_next(request)
+
+
+def require_admin(request: Request):
+    """Dependency: 403 unless the caller holds an admin token."""
+    if not auth.AUTH_ENABLED:
+        return
+    claims = getattr(request.state, "user", None)
+    if not claims:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if claims.get("role") != auth.ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin privileges required")
 
 
 @app.get("/api/auth/config", include_in_schema=False)
@@ -64,21 +94,71 @@ def auth_config():
 
 
 @app.post("/api/auth/login")
-def login(body: schemas.LoginRequest):
-    if not auth.authenticate(body.username, body.password):
+def login(body: schemas.LoginRequest, db: Session = Depends(get_db)):
+    user = crud.authenticate_user(db, body.username, body.password)
+    if user:
+        subject, role = user.username, user.role
+    elif auth.authenticate_env(body.username, body.password):
+        # env bootstrap admin — always treated as admin (lockout safeguard)
+        subject, role = body.username, auth.ROLE_ADMIN
+    else:
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = auth.create_access_token(body.username)
+    token = auth.create_access_token(subject, role)
     return {
         "access_token": token,
         "token_type": "bearer",
         "expires_in": auth.JWT_EXPIRE_MINUTES * 60,
+        "role": role,
     }
 
 
 @app.get("/api/auth/me")
-def auth_me():
+def auth_me(request: Request):
     """Protected by the middleware — a 200 here confirms the token is valid."""
-    return {"username": auth.ADMIN_USERNAME}
+    claims = getattr(request.state, "user", None) or {}
+    return {
+        "username": claims.get("sub", auth.ADMIN_USERNAME),
+        "role": claims.get("role", auth.ROLE_ADMIN),
+    }
+
+
+# ── Users (admin only) ──────────────────────────────────────────────────────
+
+@app.get("/api/users", response_model=list[schemas.UserOut], dependencies=[Depends(require_admin)])
+def list_users(db: Session = Depends(get_db)):
+    return crud.get_users(db)
+
+
+@app.post("/api/users", response_model=schemas.UserOut, status_code=201, dependencies=[Depends(require_admin)])
+def create_user(body: schemas.UserCreate, db: Session = Depends(get_db)):
+    if crud.get_user_by_username(db, body.username):
+        raise HTTPException(status_code=409, detail="Username already exists")
+    return crud.create_user(db, body.username, body.password, body.role)
+
+
+@app.patch("/api/users/{user_id}", response_model=schemas.UserOut, dependencies=[Depends(require_admin)])
+def update_user(user_id: int, body: schemas.UserUpdate, db: Session = Depends(get_db)):
+    user = crud.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Guard against locking everyone out: don't demote/disable the last admin.
+    demoting = (body.role is not None and body.role != auth.ROLE_ADMIN) or body.is_active is False
+    if user.role == auth.ROLE_ADMIN and demoting and crud.count_active_admins(db) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last active admin")
+    return crud.update_user(db, user_id, password=body.password, role=body.role, is_active=body.is_active)
+
+
+@app.delete("/api/users/{user_id}", status_code=204, dependencies=[Depends(require_admin)])
+def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    user = crud.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    claims = getattr(request.state, "user", None) or {}
+    if user.username == claims.get("sub"):
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+    if user.role == auth.ROLE_ADMIN and crud.count_active_admins(db) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last active admin")
+    crud.delete_user(db, user_id)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -99,12 +179,16 @@ def list_targets(tag: str | None = None, db: Session = Depends(get_db)):
     return crud.get_targets(db, tag_filter=tag)
 
 
-@app.post("/api/targets", response_model=schemas.TargetOut, status_code=201)
+@app.post("/api/targets", response_model=schemas.TargetOut, status_code=201, dependencies=[Depends(require_admin)])
 def add_target(body: schemas.TargetCreate, db: Session = Depends(get_db)):
     existing = db.query(models.Target).filter(models.Target.host == body.host).first()
-    if existing and existing.is_active:
-        raise HTTPException(status_code=409, detail="Target with this host already exists")
-    target = crud.create_target(db, body)
+    if existing:
+        if existing.is_active:
+            raise HTTPException(status_code=409, detail="Target with this host already exists")
+        # host was soft-deleted earlier — reactivate instead of inserting a dup
+        target = crud.reactivate_target(db, existing, body)
+    else:
+        target = crud.create_target(db, body)
     return {
         "id": target.id, "name": target.name, "host": target.host,
         "description": target.description, "tags": target.tags,
@@ -113,13 +197,13 @@ def add_target(body: schemas.TargetCreate, db: Session = Depends(get_db)):
     }
 
 
-@app.patch("/api/targets/{target_id}/tags", status_code=204)
+@app.patch("/api/targets/{target_id}/tags", status_code=204, dependencies=[Depends(require_admin)])
 def update_tags(target_id: int, body: dict, db: Session = Depends(get_db)):
     if not crud.update_target_tags(db, target_id, body.get("tags", "")):
         raise HTTPException(status_code=404, detail="Target not found")
 
 
-@app.delete("/api/targets/{target_id}", status_code=204)
+@app.delete("/api/targets/{target_id}", status_code=204, dependencies=[Depends(require_admin)])
 def remove_target(target_id: int, db: Session = Depends(get_db)):
     if not crud.delete_target(db, target_id):
         raise HTTPException(status_code=404, detail="Target not found")
@@ -304,12 +388,12 @@ def list_schedules(db: Session = Depends(get_db)):
     return crud.get_schedules(db)
 
 
-@app.post("/api/schedules", response_model=schemas.ScheduleOut, status_code=201)
+@app.post("/api/schedules", response_model=schemas.ScheduleOut, status_code=201, dependencies=[Depends(require_admin)])
 def create_schedule(body: schemas.ScheduleCreate, db: Session = Depends(get_db)):
     return crud.create_schedule(db, body)
 
 
-@app.post("/api/schedules/{schedule_id}/toggle", response_model=schemas.ScheduleOut)
+@app.post("/api/schedules/{schedule_id}/toggle", response_model=schemas.ScheduleOut, dependencies=[Depends(require_admin)])
 def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
     sched = crud.toggle_schedule(db, schedule_id)
     if not sched:
@@ -323,7 +407,7 @@ def run_schedule_now(schedule_id: int, db: Session = Depends(get_db)):
     return {"launched": count}
 
 
-@app.delete("/api/schedules/{schedule_id}", status_code=204)
+@app.delete("/api/schedules/{schedule_id}", status_code=204, dependencies=[Depends(require_admin)])
 def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
     if not crud.delete_schedule(db, schedule_id):
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -341,7 +425,7 @@ SETTINGS_KEYS = {
 }
 
 
-@app.get("/api/settings")
+@app.get("/api/settings", dependencies=[Depends(require_admin)])
 def get_settings(db: Session = Depends(get_db)):
     s = crud.get_all_settings(db)
     # Never expose smtp password in plaintext
@@ -350,7 +434,7 @@ def get_settings(db: Session = Depends(get_db)):
     return s
 
 
-@app.post("/api/settings")
+@app.post("/api/settings", dependencies=[Depends(require_admin)])
 def save_settings(body: dict, db: Session = Depends(get_db)):
     for k, v in body.items():
         if k not in SETTINGS_KEYS:
@@ -362,7 +446,7 @@ def save_settings(body: dict, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-@app.post("/api/settings/test-slack")
+@app.post("/api/settings/test-slack", dependencies=[Depends(require_admin)])
 def test_slack(body: dict, db: Session = Depends(get_db)):
     from .notifications import send_slack_message
     webhook_url = body.get("webhook_url") or crud.get_setting(db, "slack_webhook_url")
@@ -375,7 +459,7 @@ def test_slack(body: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/api/settings/test-webhook")
+@app.post("/api/settings/test-webhook", dependencies=[Depends(require_admin)])
 def test_webhook(body: dict, db: Session = Depends(get_db)):
     from .notifications import send_webhook_message
     from datetime import datetime, timezone
@@ -393,7 +477,7 @@ def test_webhook(body: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/api/settings/test-email")
+@app.post("/api/settings/test-email", dependencies=[Depends(require_admin)])
 def test_email(body: dict, db: Session = Depends(get_db)):
     from .notifications import send_email
     smtp_host = body.get("smtp_host") or crud.get_setting(db, "smtp_host")

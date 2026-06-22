@@ -86,6 +86,18 @@ def create_target(db: Session, data: schemas.TargetCreate) -> models.Target:
     return target
 
 
+def reactivate_target(db: Session, target: models.Target, data: schemas.TargetCreate) -> models.Target:
+    """Re-add a previously soft-deleted host: reuse the row (keeps scan history)
+    instead of inserting a duplicate that would violate the unique host index."""
+    target.name = data.name
+    target.description = data.description
+    target.tags = _clean_tags(data.tags)
+    target.is_active = True
+    db.commit()
+    db.refresh(target)
+    return target
+
+
 def update_target_tags(db: Session, target_id: int, tags: str) -> bool:
     target = get_target(db, target_id)
     if not target:
@@ -464,3 +476,77 @@ def trigger_schedule_now(db: Session, schedule_id: int) -> int:
     sched.next_run_at = now + INTERVALS.get(sched.interval, timedelta(days=1))
     db.commit()
     return count
+
+
+# ── Users ─────────────────────────────────────────────────────────────────────
+
+def get_users(db: Session) -> list[models.User]:
+    return db.query(models.User).order_by(models.User.created_at.asc()).all()
+
+
+def get_user(db: Session, user_id: int) -> models.User | None:
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+
+def get_user_by_username(db: Session, username: str) -> models.User | None:
+    return db.query(models.User).filter(models.User.username == username).first()
+
+
+def count_active_admins(db: Session) -> int:
+    from . import auth
+    return (
+        db.query(models.User)
+        .filter(models.User.role == auth.ROLE_ADMIN, models.User.is_active == True)
+        .count()
+    )
+
+
+def create_user(db: Session, username: str, password: str, role: str) -> models.User:
+    from . import auth
+    user = models.User(
+        username=username,
+        password_hash=auth.hash_password(password),
+        role=role,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user(db: Session, user_id: int, *, password: str | None = None,
+                role: str | None = None, is_active: bool | None = None) -> models.User | None:
+    from . import auth
+    user = get_user(db, user_id)
+    if not user:
+        return None
+    if password is not None:
+        user.password_hash = auth.hash_password(password)
+    if role is not None:
+        user.role = role
+    if is_active is not None:
+        user.is_active = is_active
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def delete_user(db: Session, user_id: int) -> bool:
+    user = get_user(db, user_id)
+    if not user:
+        return False
+    db.delete(user)
+    db.commit()
+    return True
+
+
+def authenticate_user(db: Session, username: str, password: str) -> models.User | None:
+    """Verify credentials against the DB users table (bcrypt)."""
+    from . import auth
+    user = get_user_by_username(db, username)
+    if not user or not user.is_active:
+        return None
+    if not auth.verify_password(password, user.password_hash):
+        return None
+    return user
