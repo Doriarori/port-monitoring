@@ -256,6 +256,10 @@
     :root.light .b-ack{background:#dcfce7;color:#166534}
     :root.light .diff-added{background:#dcfce744}
     :root.light .diff-removed{background:#fee2e244}
+    .user-dd{display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--bg2);border:1px solid var(--border);border-radius:.4rem;min-width:110px;z-index:200;padding:.25rem 0;box-shadow:0 4px 12px #0004}
+    .user-dd.open{display:block}
+    .user-dd button{width:100%;padding:.4rem .85rem;border:none;background:none;color:var(--text);cursor:pointer;text-align:left;font-size:.875rem;white-space:nowrap}
+    .user-dd button:hover{background:var(--bg3);color:var(--text)}
   </style>
 </head>
 <body>
@@ -286,10 +290,14 @@
     <button class="ntab" data-view="scans"            onclick="showView('scans')">Scans</button>
     <button class="ntab" data-view="vulnerabilities"  onclick="showView('vulnerabilities')">Vulnerabilities</button>
     <button class="ntab" data-view="schedules"        onclick="showView('schedules')">Schedules</button>
-    <button class="ntab admin-only" data-view="users"  onclick="showView('users')">👥 Users</button>
+    <button class="ntab admin-only" data-view="users"  onclick="showView('users')">Users</button>
     <button class="ntab admin-only" data-view="settings" onclick="showView('settings')" style="margin-left:.5rem">⚙ Settings</button>
-    <span id="user-label" class="ntab" style="display:none;cursor:default;margin-left:.5rem"></span>
-    <button id="logout-btn" class="ntab" onclick="logout()" style="display:none">⎋ Logout</button>
+    <div id="user-menu" style="display:none;position:relative;margin-left:.5rem">
+      <button id="user-menu-btn" class="ntab" onclick="toggleUserMenu()"></button>
+      <div id="user-menu-dd" class="user-dd">
+        <button onclick="logout()">Logout</button>
+      </div>
+    </div>
   </nav>
 </div>
 
@@ -662,7 +670,7 @@
     <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr>
-          <th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th>
+          <th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th><th style="width:2.5rem"></th>
         </tr></thead>
         <tbody id="users-tbody"></tbody>
       </table>
@@ -1527,11 +1535,21 @@ function applyRoleVisibility(){
   document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display=admin?'':'none'; });
 }
 function setUserLabel(me){
-  const el=document.getElementById('user-label');
-  if(!me){ el.style.display='none'; return; }
-  el.textContent=`${me.username} · ${me.role==='admin'?'admin':'read-only'}`;
-  el.style.display='';
+  const menu=document.getElementById('user-menu');
+  const btn=document.getElementById('user-menu-btn');
+  if(!me){ menu.style.display='none'; return; }
+  btn.textContent=`${me.username} · ${me.role==='admin'?'admin':'read-only'}`;
+  menu.style.display='';
 }
+function toggleUserMenu(){
+  document.getElementById('user-menu-dd').classList.toggle('open');
+}
+document.addEventListener('click',function(e){
+  const menu=document.getElementById('user-menu');
+  if(menu&&!menu.contains(e.target)){
+    document.getElementById('user-menu-dd').classList.remove('open');
+  }
+});
 
 function showLogin(){
   const ov=document.getElementById('login-overlay');
@@ -1553,7 +1571,7 @@ function hideLogin(){
 }
 function handleAuthExpired(){
   localStorage.removeItem('pm_token');
-  document.getElementById('logout-btn').style.display='none';
+  document.getElementById('user-menu').style.display='none';
   stopPolling();  // stop the 5s loop so it can't spam 401s and steal focus
   showLogin();
 }
@@ -1580,7 +1598,7 @@ async function login(e){
 }
 function logout(){
   localStorage.removeItem('pm_token');
-  document.getElementById('logout-btn').style.display='none';
+  document.getElementById('user-menu').style.display='none';
   showLogin();
 }
 
@@ -1611,7 +1629,7 @@ async function bootApp(){
     setUserLabel(null);
   }
   hideLogin();
-  document.getElementById('logout-btn').style.display=AUTH_ON?'':'none';
+  if(!AUTH_ON) document.getElementById('user-menu').style.display='none';
   applyRoleVisibility();
   // Settings is admin-only; only admins can read the theme preference.
   if(isAdmin()) api('/settings').then(s=>{if(s&&s.theme==='light')_applyTheme(true);}).catch(function(){});
@@ -1645,7 +1663,9 @@ function renderUsers(){
     <td style="display:flex;gap:.3rem;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="changeUserRole(${u.id},'${u.role==='admin'?'readonly':'admin'}')">${u.role==='admin'?'→ read-only':'→ admin'}</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleUserActive(${u.id},${u.is_active?'false':'true'})">${u.is_active?'Disable':'Enable'}</button>
-      <button class="btn btn-danger btn-sm" onclick="delUser(${u.id},'${esc(u.username)}')">✕</button>
+    </td>
+    <td style="width:2.5rem;text-align:center">
+      <button class="xbtn" onclick="delUser(${u.id},'${esc(u.username)}')" title="Delete user">✕</button>
     </td>
   </tr>`).join('');
 }
